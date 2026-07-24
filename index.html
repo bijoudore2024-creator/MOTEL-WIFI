@@ -26,6 +26,7 @@
     --text-faint:#7a869c;
     --red:#ff5c5c;
     --green:#2ee89a;
+    --blue:#5aa9ff;
     --radius:14px;
     /* Zones sûres (encoche, barres système, bords arrondis) */
     --safe-t:env(safe-area-inset-top,0px);
@@ -455,6 +456,20 @@
   .icon-action.danger:hover{color:var(--red); border-color:var(--red);}
   .badge.gold{background:rgba(201,168,76,.15); color:var(--gold);}
   .badge.faint{background:rgba(255,255,255,.05); color:var(--text-faint);}
+  .badge.blue{background:rgba(90,169,255,.15); color:var(--blue);}
+  .chambre-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin-top:14px;}
+  .chambre-card{background:var(--bg-elev2); border:1px solid var(--border); border-radius:12px; padding:14px; cursor:pointer; transition:border-color .15s, transform .15s;}
+  .chambre-card:hover{border-color:var(--gold-dim); transform:translateY(-2px);}
+  .chambre-card .cc-num{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:16px;}
+  .chambre-card .cc-prix{font-size:12px; color:var(--text-faint); margin-top:2px;}
+  .chambre-card .cc-status{margin-top:10px;}
+  .chambre-card.st-libre{border-left:3px solid var(--green);}
+  .chambre-card.st-occupee{border-left:3px solid var(--red);}
+  .chambre-card.st-nettoyage{border-left:3px solid var(--gold);}
+  .chambre-card.st-hors_service{border-left:3px solid var(--blue); opacity:.7;}
+  .chambre-legende{display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--text-faint);}
+  .chambre-legende span{display:inline-flex; align-items:center; gap:6px;}
+  .chambre-legende i{width:9px; height:9px; border-radius:50%; display:inline-block;}
 
   /* ---------- Modales ---------- */
   .modal-overlay{
@@ -608,6 +623,7 @@
 
     <nav class="sb-nav" id="navList">
       <div class="nav-item active" data-page="dashboard"><span class="ic">●</span>Tableau de bord</div>
+      <div class="nav-item" data-page="chambres"><span class="ic">🛏</span>Chambres</div>
       <div class="nav-item" data-page="vendre"><span class="ic">○</span>Vente</div>
       <div class="nav-item" data-page="stock"><span class="ic">☰</span>Stock</div>
       <div class="nav-item" data-page="achats"><span class="ic">🛒</span>Achats fournisseurs</div>
@@ -843,6 +859,109 @@
           <div class="fb-right"><span class="ver-badge">Version 1.0.0</span><span>⚙ Système de gestion avancé</span></div>
         </div>
       </section>
+
+      <!-- CHAMBRES -->
+      <section class="page" id="page-chambres">
+        <div class="quick-nav"></div>
+        <div class="page-title">Chambres</div>
+        <div class="page-sub">Gestion des chambres — statuts, check-in / check-out, facturation nuitée</div>
+
+        <div class="subpage-toolbar" style="justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <div class="chambre-legende">
+            <span><i style="background:var(--green);"></i>Libre</span>
+            <span><i style="background:var(--red);"></i>Occupée</span>
+            <span><i style="background:var(--gold);"></i>Nettoyage</span>
+            <span><i style="background:var(--blue);"></i>Hors service</span>
+          </div>
+          <button class="btn" id="btnAddChambre">+ Ajouter une chambre</button>
+        </div>
+
+        <div id="chambresEmpty" class="empty" style="display:none;">
+          <div class="ic">🛏</div>
+          Aucune chambre configurée pour le moment.<br>
+          <button class="btn" style="margin-top:18px;" id="btnAddChambre2">+ Ajouter une chambre</button>
+        </div>
+        <div class="chambre-grid" id="chambreGrid"></div>
+
+        <div class="page-sub" style="margin-top:32px;">Séjours en cours</div>
+        <div id="sejoursEnCoursWrap"></div>
+      </section>
+
+      <!-- MODALE CHAMBRE (ajout/édition) -->
+      <div class="modal-overlay" id="modalChambre">
+        <div class="modal">
+          <div class="modal-title" id="modalChambreTitle">Ajouter une chambre</div>
+          <input type="hidden" id="chId">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Numéro / nom de la chambre</label>
+              <input type="text" id="chNumero" placeholder="Ex : 12 ou Ch. A1">
+            </div>
+            <div class="form-group">
+              <label>Prix par nuit (GNF)</label>
+              <input type="number" id="chPrix" placeholder="0" min="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Note (optionnel)</label>
+            <input type="text" id="chNote" placeholder="Ex : Climatisée, lit double...">
+          </div>
+          <div class="modal-actions">
+            <button class="btn outline" id="btnCancelChambre">Annuler</button>
+            <button class="btn" id="btnSaveChambre">Enregistrer</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODALE OCCUPER LA CHAMBRE (check-in + facturation) -->
+      <div class="modal-overlay" id="modalOccuper">
+        <div class="modal">
+          <div class="modal-title" id="modalOccuperTitle">Enregistrer un client — Chambre</div>
+          <input type="hidden" id="ocChambreId">
+          <div class="form-group">
+            <label>Nom du client</label>
+            <input type="text" id="ocClientNom" placeholder="Nom du client">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Nombre de nuits</label>
+              <input type="number" id="ocNuits" value="1" min="1">
+            </div>
+            <div class="form-group">
+              <label>Prix par nuit (GNF)</label>
+              <input type="number" id="ocPrixNuit" min="0">
+            </div>
+          </div>
+          <div style="font-size:13px; font-weight:700; letter-spacing:.5px; color:var(--gold); margin:14px 0 10px;">Suppléments (bar / articles)</div>
+          <div id="ocSupplementsListe"></div>
+          <div class="form-row" style="align-items:flex-end;">
+            <div class="form-group">
+              <label>Article</label>
+              <select id="ocSupProduit"><option value="">— Choisir un produit —</option></select>
+            </div>
+            <div class="form-group" style="max-width:90px;">
+              <label>Qté</label>
+              <input type="number" id="ocSupQte" value="1" min="1">
+            </div>
+            <button type="button" class="btn outline" id="btnAddSupplement" style="height:44px;">+ Ajouter</button>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-weight:700; font-size:15px; margin:16px 0 6px; padding-top:12px; border-top:1px solid var(--border);">
+            <span>TOTAL FACTURE</span><span id="ocTotal">0 GNF</span>
+          </div>
+          <div class="form-group">
+            <label>Mode de paiement</label>
+            <select id="ocPaiement">
+              <option value="especes">Espèces</option>
+              <option value="orangeMoney">Orange Money</option>
+              <option value="credit">Crédit client</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button class="btn outline" id="btnCancelOccuper">Annuler</button>
+            <button class="btn" id="btnSaveOccuper">Encaisser et occuper</button>
+          </div>
+        </div>
+      </div>
 
       <!-- VENDRE -->
       <section class="page" id="page-vendre">
@@ -1569,9 +1688,9 @@ try{
   overlay.addEventListener('click', closeSidebar);
 
   // ---------- Data layer (localStorage for now, Firebase plus tard) ----------
-  const ALL_PAGES = ['dashboard','vendre','stock','achats','depenses','credits','caisse','rapports','journal','parametres'];
+  const ALL_PAGES = ['dashboard','chambres','vendre','stock','achats','depenses','credits','caisse','rapports','journal','parametres'];
   const PAGE_LABELS = {
-    dashboard:'Tableau de bord', vendre:'Vente', stock:'Stock',
+    dashboard:'Tableau de bord', chambres:'Chambres', vendre:'Vente', stock:'Stock',
     achats:'Achats fournisseurs', depenses:'Dépenses', credits:'Crédits clients', caisse:'Caisse',
     rapports:'Rapports', journal:"Journal d'activité", parametres:'Paramètres'
   };
@@ -1581,6 +1700,8 @@ try{
       const d = JSON.parse(localStorage.getItem(STORE_KEY)) || defaultData();
       if(!d.categoriesPerso) d.categoriesPerso = [];
       if(!d.achats) d.achats = [];
+      if(!d.chambres) d.chambres = [];
+      if(!d.sejours) d.sejours = [];
       // Migration : anciens achats mono-produit -> format multi-lignes
       d.achats.forEach(a=>{
         if(!a.lignes){
@@ -1608,6 +1729,8 @@ try{
       stockFaible: 0,
       produits: [],
       casiers: [],
+      chambres: [],
+      sejours: [],
       ventes7j: [0,0,0,0,0,0,0],
       categories: { boissons:0, snacks:0, cigarettes:0, autres:0 },
       categoriesPerso: [],
@@ -1635,7 +1758,7 @@ try{
           'Président Directeur Général': ALL_PAGES.slice(),
           'Directeur Général': ALL_PAGES.slice(),
           'Gérant': ALL_PAGES.filter(p=>p!=='parametres'),
-          'Caissier': ['dashboard','vendre','caisse','credits']
+          'Caissier': ['dashboard','chambres','vendre','caisse','credits']
         },
         firebase: { docId:'', autoSync:true }
       }
@@ -3328,6 +3451,290 @@ try{
   });
 
   document.getElementById('btnAddProduit').addEventListener('click', ()=>openProduitModal());
+
+  // =========================================================
+  // MODULE CHAMBRES
+  // =========================================================
+  const STATUT_LABELS_CH = { libre:'Libre', occupee:'Occupée', nettoyage:'Nettoyage', hors_service:'Hors service' };
+  const STATUT_BADGE_CH = { libre:'green', occupee:'red', nettoyage:'gold', hors_service:'blue' };
+
+  function renderChambreGrid(){
+    const grid = document.getElementById('chambreGrid');
+    const empty = document.getElementById('chambresEmpty');
+    const liste = [...data.chambres].sort((a,b)=> a.numero.localeCompare(b.numero, 'fr', {numeric:true}));
+    if(!liste.length){
+      grid.innerHTML = '';
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+    grid.innerHTML = liste.map(c=>{
+      const statut = c.statut || 'libre';
+      return `<div class="chambre-card st-${statut}" data-chambre-id="${c.id}">
+        <div class="cc-num">${(c.numero||'').replace(/</g,'&lt;')}</div>
+        <div class="cc-prix">${fmt(c.prix||0)} GNF / nuit</div>
+        <div class="cc-status"><span class="badge ${STATUT_BADGE_CH[statut]}">${STATUT_LABELS_CH[statut]}</span></div>
+      </div>`;
+    }).join('');
+    grid.querySelectorAll('[data-chambre-id]').forEach(el=>{
+      el.addEventListener('click', ()=> openChambreActionMenu(el.dataset.chambreId));
+    });
+    renderSejoursEnCours();
+  }
+
+  function renderSejoursEnCours(){
+    const wrap = document.getElementById('sejoursEnCoursWrap');
+    if(!wrap) return;
+    const enCours = (data.sejours||[]).filter(s=>!s.checkOut);
+    if(!enCours.length){
+      wrap.innerHTML = '<div class="empty"><div class="ic">🛏</div>Aucun séjour en cours.</div>';
+      return;
+    }
+    const rows = enCours.map(s=>{
+      const ch = data.chambres.find(c=>c.id===s.chambreId);
+      const dIn = new Date(s.checkIn);
+      const dateStr = isNaN(dIn) ? '' : dIn.toLocaleDateString('fr-FR', {day:'2-digit', month:'short', year:'numeric'});
+      return `<tr>
+        <td>${ch ? ch.numero.replace(/</g,'&lt;') : '—'}</td>
+        <td>${(s.clientNom||'').replace(/</g,'&lt;')}</td>
+        <td>${s.nuits} nuit(s)</td>
+        <td class="mono">${fmt(s.total)} GNF</td>
+        <td>${dateStr}</td>
+        <td><button class="btn outline" style="padding:6px 12px; font-size:12px;" data-checkout="${s.id}">Check-out</button></td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `<div class="data-card"><table>
+      <thead><tr><th>CHAMBRE</th><th>CLIENT</th><th>DURÉE</th><th>TOTAL</th><th>ARRIVÉE</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+    wrap.querySelectorAll('[data-checkout]').forEach(btn=>{
+      btn.addEventListener('click', ()=> checkOutSejour(btn.dataset.checkout));
+    });
+  }
+
+  // ---------- Ajout / édition d'une chambre ----------
+  const modalChambre = document.getElementById('modalChambre');
+  function openChambreModal(id){
+    const c = id ? data.chambres.find(x=>x.id===id) : null;
+    document.getElementById('modalChambreTitle').textContent = c ? 'Modifier la chambre' : 'Ajouter une chambre';
+    document.getElementById('chId').value = c ? c.id : '';
+    document.getElementById('chNumero').value = c ? c.numero : '';
+    document.getElementById('chPrix').value = c ? c.prix : '';
+    document.getElementById('chNote').value = c ? (c.note||'') : '';
+    modalChambre.classList.add('show');
+  }
+  function closeChambreModal(){ modalChambre.classList.remove('show'); }
+  document.getElementById('btnAddChambre').addEventListener('click', ()=>openChambreModal());
+  document.getElementById('btnAddChambre2').addEventListener('click', ()=>openChambreModal());
+  document.getElementById('btnCancelChambre').addEventListener('click', closeChambreModal);
+  modalChambre.addEventListener('click', e=>{ if(e.target===modalChambre) closeChambreModal(); });
+  document.getElementById('btnSaveChambre').addEventListener('click', ()=>{
+    const id = document.getElementById('chId').value;
+    const numero = document.getElementById('chNumero').value.trim();
+    const prix = Number(document.getElementById('chPrix').value)||0;
+    const note = document.getElementById('chNote').value.trim();
+    if(!numero){ alert('Le numéro / nom de la chambre est requis.'); return; }
+    const doublon = data.chambres.find(c=>c.numero.toLowerCase()===numero.toLowerCase() && c.id!==id);
+    if(doublon){ alert('Une chambre avec ce numéro existe déjà.'); return; }
+    if(id){
+      const idx = data.chambres.findIndex(c=>c.id===id);
+      data.chambres[idx] = { ...data.chambres[idx], numero, prix, note };
+    } else {
+      data.chambres.push({ id: uid(), numero, prix, note, statut:'libre' });
+    }
+    saveData(data);
+    closeChambreModal();
+    renderChambreGrid();
+    logActivite(id ? 'Chambre modifiée' : 'Chambre ajoutée', numero);
+  });
+
+  // ---------- Menu d'action sur une chambre (selon statut) ----------
+  function openChambreActionMenu(id){
+    const c = data.chambres.find(x=>x.id===id);
+    if(!c) return;
+    const statut = c.statut || 'libre';
+    if(statut === 'libre'){
+      openOccuperModal(id);
+    } else if(statut === 'occupee'){
+      const s = (data.sejours||[]).find(x=>x.chambreId===id && !x.checkOut);
+      if(s){ checkOutSejour(s.id); }
+    } else if(statut === 'nettoyage'){
+      if(confirm('Marquer la chambre "'+c.numero+'" comme libre (nettoyage terminé) ?')){
+        c.statut = 'libre';
+        saveData(data); renderChambreGrid();
+        logActivite('Chambre disponible', c.numero + ' — nettoyage terminé');
+      } else if(confirm('Ou modifier les informations de cette chambre ?')){
+        openChambreModal(id);
+      }
+    } else if(statut === 'hors_service'){
+      if(confirm('Remettre la chambre "'+c.numero+'" en service (libre) ?')){
+        c.statut = 'libre';
+        saveData(data); renderChambreGrid();
+        logActivite('Chambre remise en service', c.numero);
+      }
+    }
+  }
+
+  // ---------- Check-in : occuper une chambre + facturer ----------
+  let ocSupplements = []; // [{produitId, nom, qte, prixUnitaire}]
+  const modalOccuper = document.getElementById('modalOccuper');
+  function openOccuperModal(chambreId){
+    const c = data.chambres.find(x=>x.id===chambreId);
+    if(!c) return;
+    document.getElementById('modalOccuperTitle').textContent = 'Enregistrer un client — Chambre ' + c.numero;
+    document.getElementById('ocChambreId').value = chambreId;
+    document.getElementById('ocClientNom').value = '';
+    document.getElementById('ocNuits').value = 1;
+    document.getElementById('ocPrixNuit').value = c.prix || 0;
+    document.getElementById('ocPaiement').value = 'especes';
+    ocSupplements = [];
+    const sel = document.getElementById('ocSupProduit');
+    sel.innerHTML = '<option value="">— Choisir un produit —</option>' +
+      [...data.produits].sort((a,b)=>a.nom.localeCompare(b.nom))
+        .map(p=>`<option value="${p.id}">${p.nom.replace(/</g,'&lt;')} — ${fmt(p.prix)} GNF</option>`).join('');
+    renderOcSupplements();
+    modalOccuper.classList.add('show');
+  }
+  function closeOccuperModal(){ modalOccuper.classList.remove('show'); }
+  document.getElementById('btnCancelOccuper').addEventListener('click', closeOccuperModal);
+  modalOccuper.addEventListener('click', e=>{ if(e.target===modalOccuper) closeOccuperModal(); });
+
+  function ocTotalGNF(){
+    const nuits = Math.max(1, Number(document.getElementById('ocNuits').value)||1);
+    const prixNuit = Number(document.getElementById('ocPrixNuit').value)||0;
+    const totalNuitees = nuits * prixNuit;
+    const totalSupplements = ocSupplements.reduce((s,l)=>s + l.qte*l.prixUnitaire, 0);
+    return totalNuitees + totalSupplements;
+  }
+  function renderOcSupplements(){
+    const wrap = document.getElementById('ocSupplementsListe');
+    if(!ocSupplements.length){
+      wrap.innerHTML = '<div style="font-size:12.5px; color:var(--text-faint); padding:6px 0;">Aucun supplément ajouté.</div>';
+    } else {
+      wrap.innerHTML = ocSupplements.map((l,i)=>`
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:13.5px;">
+          <span>${l.nom.replace(/</g,'&lt;')} x${l.qte}</span>
+          <span style="display:flex; align-items:center; gap:10px;">
+            <span class="mono">${fmt(l.qte*l.prixUnitaire)} GNF</span>
+            <span style="cursor:pointer; color:var(--red);" data-rm-sup="${i}">✕</span>
+          </span>
+        </div>`).join('');
+      wrap.querySelectorAll('[data-rm-sup]').forEach(el=>{
+        el.addEventListener('click', ()=>{ ocSupplements.splice(Number(el.dataset.rmSup),1); renderOcSupplements(); });
+      });
+    }
+    document.getElementById('ocTotal').textContent = fmt(ocTotalGNF()) + ' GNF';
+  }
+  document.getElementById('ocNuits').addEventListener('input', renderOcSupplements);
+  document.getElementById('ocPrixNuit').addEventListener('input', renderOcSupplements);
+  document.getElementById('btnAddSupplement').addEventListener('click', ()=>{
+    const prodId = document.getElementById('ocSupProduit').value;
+    const qte = Math.max(1, Number(document.getElementById('ocSupQte').value)||1);
+    if(!prodId){ alert('Choisissez un produit.'); return; }
+    const p = data.produits.find(x=>x.id===prodId);
+    if(!p) return;
+    if(Number(p.qte||0) < qte){
+      if(!confirm('Stock insuffisant pour "'+p.nom+'" (dispo : '+p.qte+'). Ajouter quand même ?')) return;
+    }
+    const existant = ocSupplements.find(l=>l.produitId===prodId);
+    if(existant){ existant.qte += qte; }
+    else { ocSupplements.push({ produitId:prodId, nom:p.nom, qte, prixUnitaire:Number(p.prix||0) }); }
+    document.getElementById('ocSupQte').value = 1;
+    renderOcSupplements();
+  });
+
+  document.getElementById('btnSaveOccuper').addEventListener('click', ()=>{
+    const chambreId = document.getElementById('ocChambreId').value;
+    const c = data.chambres.find(x=>x.id===chambreId);
+    if(!c) return;
+    const clientNom = document.getElementById('ocClientNom').value.trim();
+    if(!clientNom){ alert('Le nom du client est requis.'); return; }
+    const nuits = Math.max(1, Number(document.getElementById('ocNuits').value)||1);
+    const prixNuit = Number(document.getElementById('ocPrixNuit').value)||0;
+    const paiement = document.getElementById('ocPaiement').value;
+    const total = ocTotalGNF();
+
+    // Décrémenter le stock des suppléments et comptabiliser par catégorie
+    ocSupplements.forEach(l=>{
+      const p = data.produits.find(x=>x.id===l.produitId);
+      if(!p) return;
+      p.qte = Math.max(0, Number(p.qte||0) - l.qte);
+      const ca = l.qte * l.prixUnitaire;
+      data.categories[p.categorie] = (data.categories[p.categorie]||0) + ca;
+    });
+
+    // Encaissement
+    if(paiement === 'especes'){
+      data.caisse.especes += total;
+    } else if(paiement === 'orangeMoney'){
+      data.caisse.orangeMoney += total;
+    } else if(paiement === 'credit'){
+      const existant = data.clientsCredits.find(cl=>cl.nom.toLowerCase()===clientNom.toLowerCase());
+      if(existant){ existant.montant += total; }
+      else { data.clientsCredits.push({ id: uid(), nom: clientNom, montant: total, date: new Date().toISOString() }); }
+    }
+
+    data.ventesJour += total;
+    data.ticketsJour += 1;
+
+    const heure = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+    const desc = 'Chambre ' + c.numero + ' (' + nuits + ' nuit(s))' + (ocSupplements.length ? ' + ' + ocSupplements.map(l=>l.nom+' x'+l.qte).join(', ') : '');
+    const typeLabel = paiement==='especes' ? 'Chambre (espèces)' : paiement==='orangeMoney' ? 'Chambre (Orange Money)' : 'Chambre (crédit)';
+    data.dernieresTransactions.unshift({ type: typeLabel, description: desc, montant: total, heure });
+    data.dernieresTransactions = data.dernieresTransactions.slice(0, 10);
+
+    // Enregistrer le séjour + occuper la chambre
+    const sejour = {
+      id: uid(),
+      chambreId: c.id,
+      chambreNumero: c.numero,
+      clientNom,
+      nuits,
+      prixNuit,
+      supplements: ocSupplements.map(l=>({ nom:l.nom, qte:l.qte, prixUnitaire:l.prixUnitaire })),
+      total,
+      paiement,
+      checkIn: new Date().toISOString(),
+      checkOut: null
+    };
+    data.sejours = data.sejours || [];
+    data.sejours.push(sejour);
+    c.statut = 'occupee';
+
+    saveData(data);
+    closeOccuperModal();
+    render();
+    renderChambreGrid();
+    logActivite('Check-in chambre', desc + ' — ' + fmt(total) + ' GNF (' + typeLabel + ') — Client : ' + clientNom);
+    const recuData = {
+      nom: data.params.nom || 'Motel Wifi Siguiri',
+      date: new Date(),
+      items: [
+        { nom: 'Chambre ' + c.numero + ' — ' + nuits + ' nuit(s)', qte: nuits, ca: nuits*prixNuit },
+        ...ocSupplements.map(l=>({ nom:l.nom, qte:l.qte, ca:l.qte*l.prixUnitaire }))
+      ],
+      total,
+      paiement,
+      clientNom
+    };
+    ouvrirRecu(recuData);
+  });
+
+  // ---------- Check-out ----------
+  function checkOutSejour(sejourId){
+    const s = (data.sejours||[]).find(x=>x.id===sejourId);
+    if(!s) return;
+    if(!confirm('Confirmer le départ du client "'+s.clientNom+'" (Chambre '+s.chambreNumero+') ?')) return;
+    s.checkOut = new Date().toISOString();
+    const c = data.chambres.find(x=>x.id===s.chambreId);
+    if(c) c.statut = 'nettoyage';
+    saveData(data);
+    render();
+    renderChambreGrid();
+    logActivite('Check-out chambre', 'Chambre ' + s.chambreNumero + ' — Client : ' + s.clientNom + ' → statut Nettoyage');
+  }
+
+  renderChambreGrid();
 
   // =========================================================
   // MODULE DEPENSES
