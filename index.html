@@ -1222,7 +1222,47 @@
             <div class="stat-value small" id="caisseOM">0<span class="stat-unit">GNF</span></div>
           </div>
         </div>
+        <div class="subpage-toolbar">
+          <button class="btn" id="btnAddMouvementCaisse">+ Ajouter un mouvement</button>
+        </div>
+        <div class="page-sub" style="margin-top:10px;">Historique des mouvements manuels</div>
+        <div id="mouvementsCaisseWrap"></div>
       </section>
+
+      <!-- MODALE MOUVEMENT CAISSE -->
+      <div class="modal-overlay" id="modalMouvementCaisse">
+        <div class="modal">
+          <div class="modal-title">Ajouter un mouvement de caisse</div>
+          <div class="form-group">
+            <label>Type de mouvement</label>
+            <select id="mvtCaisseType">
+              <option value="depot">Dépôt (entrée d'argent)</option>
+              <option value="retrait">Retrait (sortie d'argent)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Montant (GNF)</label>
+              <input type="number" id="mvtCaisseMontant" placeholder="0" min="0">
+            </div>
+            <div class="form-group">
+              <label>Caisse concernée</label>
+              <select id="mvtCaisseSource">
+                <option value="especes">Espèces</option>
+                <option value="orangeMoney">Orange Money</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Motif</label>
+            <input type="text" id="mvtCaisseMotif" placeholder="Ex : Apport personnel, retrait pour banque...">
+          </div>
+          <div class="modal-actions">
+            <button class="btn outline" id="btnCancelMouvementCaisse">Annuler</button>
+            <button class="btn" id="btnSaveMouvementCaisse">Enregistrer</button>
+          </div>
+        </div>
+      </div>
 
       <!-- RAPPORTS -->
       <section class="page" id="page-rapports">
@@ -1428,12 +1468,13 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import {
+try{
+  const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+  const {
     getFirestore, doc, setDoc, getDoc, updateDoc, increment,
     collection, addDoc, onSnapshot, query, orderBy, limit,
     enableIndexedDbPersistence, serverTimestamp
-  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
 
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyCvvIjXsDIMD4Ko3wWL9XzWNtG8tEHjRjc",
@@ -1458,6 +1499,11 @@
     collection, addDoc, onSnapshot, query, orderBy, limit, serverTimestamp
   };
   window.dispatchEvent(new Event('fb-sdk-ready'));
+  console.log('[Firebase] SDK initialisé et prêt.');
+}catch(err){
+  console.error('[Firebase] ÉCHEC du chargement/initialisation du SDK :', err);
+  window.dispatchEvent(new CustomEvent('fb-sdk-error', { detail: err }));
+}
 </script>
 <script>
   // ---------- Navigation ----------
@@ -1543,6 +1589,7 @@
   function defaultData(){
     return {
       caisse: { especes:0, orangeMoney:0 },
+      mouvementsCaisse: [],
       ventesJour: 0,
       vouchersVendus: 0,
       depensesJour: 0,
@@ -2079,6 +2126,10 @@
   let fbSdkReady = false, fbAutoSyncTimer = null;
 
   window.addEventListener('fb-sdk-ready', ()=>{ fbSdkReady = true; });
+  window.addEventListener('fb-sdk-error', (e)=>{
+    fbSdkReady = false;
+    setFbStatus('✗ Le service cloud n\'a pas pu se charger (réseau bloqué ou hors ligne). ' + (e.detail && e.detail.message ? e.detail.message : ''), true);
+  });
 
   function slugify(str){
     return (str||'motel')
@@ -2120,8 +2171,18 @@
   document.getElementById('fbDocId').addEventListener('change', persistFbSettings);
   document.getElementById('fbAutoSync').addEventListener('change', persistFbSettings);
 
+  function withTimeout(promise, ms, msg){
+    return Promise.race([
+      promise,
+      new Promise((_,rej)=> setTimeout(()=> rej(new Error(msg || 'Délai dépassé (connexion trop lente ou bloquée).')), ms))
+    ]);
+  }
+
   async function ensureFbReady(){
-    if(!fbSdkReady || !window.__fb) throw new Error('Connexion au service cloud indisponible (vérifie ta connexion internet).');
+    if(!fbSdkReady || !window.__fb){
+      console.warn('[Firebase] SDK non prêt. fbSdkReady=', fbSdkReady, 'window.__fb=', !!window.__fb);
+      throw new Error('Connexion au service cloud indisponible (le SDK Firebase n\'a pas pu se charger — vérifie ta connexion internet ou si le réseau bloque gstatic.com).');
+    }
     const docId = currentFbDocId();
     if(!docId) throw new Error("Merci de renseigner un identifiant de sauvegarde.");
     return window.__fb.db;
@@ -2131,14 +2192,23 @@
     const db = await ensureFbReady();
     const docId = currentFbDocId();
     const ref = window.__fb.doc(db, 'motelWifiSauvegardes', docId);
-    await window.__fb.setDoc(ref, { payload: JSON.stringify(data), updatedAt: new Date().toISOString() });
+    try{
+      await withTimeout(
+        window.__fb.setDoc(ref, { payload: JSON.stringify(data), updatedAt: new Date().toISOString() }),
+        15000,
+        'La synchronisation prend trop de temps — connexion internet instable ou serveur inaccessible.'
+      );
+    }catch(err){
+      console.error('[Firebase] Échec syncToFirebase:', err);
+      throw err;
+    }
   }
 
   async function restoreFromFirebase(){
     const db = await ensureFbReady();
     const docId = currentFbDocId();
     const ref = window.__fb.doc(db, 'motelWifiSauvegardes', docId);
-    const snap = await window.__fb.getDoc(ref);
+    const snap = await withTimeout(window.__fb.getDoc(ref), 15000, 'La restauration prend trop de temps — connexion internet instable ou serveur inaccessible.');
     if(!snap.exists()) throw new Error("Aucune sauvegarde trouvée pour cet identifiant.");
     const remote = JSON.parse(snap.data().payload);
     return remote;
@@ -2151,9 +2221,11 @@
       await syncToFirebase();
       setFbStatus('✓ Synchronisé le ' + new Date().toLocaleString('fr-FR'));
     }catch(err){
+      console.error('[Firebase] btnFbSyncNow:', err);
       setFbStatus('✗ Échec : ' + (err && err.message ? err.message : 'erreur inconnue'), true);
     }
   });
+
 
   document.getElementById('btnFbRestore').addEventListener('click', async ()=>{
     persistFbSettings();
@@ -3293,6 +3365,84 @@
     logActivite('Dépense enregistrée', libelle + ' — ' + fmt(montant) + ' GNF (' + (source==='especes'?'Espèces':'Orange Money') + ')');
   });
 
+  // ---------- Mouvements manuels de caisse (dépôt / retrait) ----------
+  function renderMouvementsCaisse(){
+    const wrap = document.getElementById('mouvementsCaisseWrap');
+    if(!wrap) return;
+    data.mouvementsCaisse = data.mouvementsCaisse || [];
+    const liste = [...data.mouvementsCaisse].sort((a,b)=> new Date(b.date) - new Date(a.date));
+    if(!liste.length){
+      wrap.innerHTML = '<div class="empty"><div class="ic">💼</div>Aucun mouvement manuel enregistré.</div>';
+      return;
+    }
+    const srcLabels = { especes:'Espèces', orangeMoney:'Orange Money' };
+    wrap.innerHTML = liste.map(m=>{
+      const dt = new Date(m.date);
+      const dateStr = isNaN(dt) ? '' : dt.toLocaleDateString('fr-FR') + ' à ' + dt.toLocaleTimeString('fr-FR',{hour:'2-digit', minute:'2-digit'});
+      const isDepot = m.type === 'depot';
+      const signe = isDepot ? '+' : '−';
+      const couleur = isDepot ? 'var(--green)' : 'var(--red)';
+      return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+        <div>
+          <div style="font-size:13.5px; font-weight:600;">${isDepot ? 'Dépôt' : 'Retrait'} — ${srcLabels[m.source]||m.source}</div>
+          <div style="font-size:12.5px; color:var(--text-faint); margin-top:2px;">${(m.motif||'').replace(/</g,'&lt;') || 'Sans motif précisé'}</div>
+          <div style="font-size:11.5px; color:var(--text-faint); margin-top:2px;">${dateStr}</div>
+        </div>
+        <div style="font-size:15px; font-weight:700; color:${couleur}; white-space:nowrap;">${signe} ${fmt(m.montant)} GNF</div>
+      </div>`;
+    }).join('');
+  }
+
+  const modalMouvementCaisse = document.getElementById('modalMouvementCaisse');
+  function openMouvementCaisseModal(){
+    document.getElementById('mvtCaisseType').value = 'depot';
+    document.getElementById('mvtCaisseMontant').value = '';
+    document.getElementById('mvtCaisseSource').value = 'especes';
+    document.getElementById('mvtCaisseMotif').value = '';
+    modalMouvementCaisse.classList.add('show');
+  }
+  function closeMouvementCaisseModal(){ modalMouvementCaisse.classList.remove('show'); }
+  document.getElementById('btnAddMouvementCaisse').addEventListener('click', openMouvementCaisseModal);
+  document.getElementById('btnCancelMouvementCaisse').addEventListener('click', closeMouvementCaisseModal);
+  modalMouvementCaisse.addEventListener('click', e=>{ if(e.target===modalMouvementCaisse) closeMouvementCaisseModal(); });
+  document.getElementById('btnSaveMouvementCaisse').addEventListener('click', ()=>{
+    const type = document.getElementById('mvtCaisseType').value;
+    const montant = Number(document.getElementById('mvtCaisseMontant').value)||0;
+    const source = document.getElementById('mvtCaisseSource').value;
+    const motif = document.getElementById('mvtCaisseMotif').value.trim();
+    if(montant <= 0){ alert('Le montant doit être supérieur à 0.'); return; }
+    if(type === 'retrait' && data.caisse[source] < montant){
+      if(!confirm('Le solde ' + (source==='especes'?'Espèces':'Orange Money') + ' est insuffisant. Enregistrer quand même ?')) return;
+    }
+
+    const delta = type === 'depot' ? montant : -montant;
+    const payload = { id: uid(), type, montant, source, motif, date: new Date().toISOString() };
+    data.mouvementsCaisse = data.mouvementsCaisse || [];
+    data.mouvementsCaisse.push(payload);
+    data.caisse[source] += delta;
+
+    const heure = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+    data.dernieresTransactions.unshift({
+      type: (type==='depot' ? 'Dépôt caisse (' : 'Retrait caisse (') + (source==='especes'?'espèces':'Orange Money') + ')',
+      description: motif || 'Sans motif précisé',
+      montant: delta,
+      heure
+    });
+    data.dernieresTransactions = data.dernieresTransactions.slice(0, 10);
+
+    saveData(data);
+    closeMouvementCaisseModal();
+    render();
+    renderMouvementsCaisse();
+    logActivite(
+      (type==='depot' ? 'Dépôt de caisse' : 'Retrait de caisse'),
+      (motif ? motif + ' — ' : '') + fmt(montant) + ' GNF (' + (source==='especes'?'Espèces':'Orange Money') + ')'
+    );
+    if(rtEnabled){
+      rtCreditCaisse(source, delta);
+    }
+  });
+
   // ---------- Achats fournisseurs ----------
   function renderAchats(){
     const wrap = document.getElementById('achatsWrap');
@@ -3616,7 +3766,7 @@
     }
     document.getElementById('btnConvertirBonCommande').style.display = '';
     document.getElementById('btnImprimerBonCommande').style.display = '';
-    document.getElementById('bonCommandeSub').textContent = bonCommandeLignes.length + ' produit(s) sous le seuil de stock minimal — quantités et prix pré-remplis, modifiables ci-dessous.';
+    document.getElementById('bonCommandeSub').textContent = bonCommandeLignes.length + ' produit(s) sous le seuil de stock minimal — quantités et prix pré-remplis, modifiables ci-dessous. (Actualisation auto toutes les 10s)';
     const montantEstime = bonCommandeLignes.reduce((s,l)=>s+(l.qte*l.prixUnitaire),0);
     let rows = bonCommandeLignes.map((l,i)=>`
       <tr>
@@ -3637,24 +3787,55 @@
     }
     wrap.querySelectorAll('[data-bon-qte]').forEach(el=>{
       el.addEventListener('input', ()=>{
-        bonCommandeLignes[Number(el.dataset.bonQte)].qte = Number(el.value)||0;
+        const l = bonCommandeLignes[Number(el.dataset.bonQte)];
+        l.qte = Number(el.value)||0;
+        l.touched = true;
         refreshTotal();
       });
     });
     wrap.querySelectorAll('[data-bon-prix]').forEach(el=>{
       el.addEventListener('input', ()=>{
-        bonCommandeLignes[Number(el.dataset.bonPrix)].prixUnitaire = Number(el.value)||0;
+        const l = bonCommandeLignes[Number(el.dataset.bonPrix)];
+        l.prixUnitaire = Number(el.value)||0;
+        l.touched = true;
         refreshTotal();
       });
     });
+  }
+
+  let bonCommandeAutoTimer = null;
+  const BON_COMMANDE_REFRESH_MS = 10000;
+
+  function rafraichirBonCommandeAuto(){
+    // Recalcule la liste depuis le stock actuel, mais garde les qté/prix déjà modifiés par l'utilisateur
+    const anciennes = {};
+    bonCommandeLignes.forEach(l=>{ anciennes[l.produitId] = { qte: l.qte, prixUnitaire: l.prixUnitaire, touched: l.touched }; });
+    const fraiches = calculerProduitsAReapprovisionner();
+    fraiches.forEach(l=>{
+      const prec = anciennes[l.produitId];
+      if(prec && prec.touched){ l.qte = prec.qte; l.prixUnitaire = prec.prixUnitaire; l.touched = true; }
+    });
+    bonCommandeLignes = fraiches;
+    renderBonCommande();
+  }
+
+  function startBonCommandeAutoRefresh(){
+    stopBonCommandeAutoRefresh();
+    bonCommandeAutoTimer = setInterval(()=>{
+      if(modalBonCommande.classList.contains('show')) rafraichirBonCommandeAuto();
+    }, BON_COMMANDE_REFRESH_MS);
+  }
+  function stopBonCommandeAutoRefresh(){
+    if(bonCommandeAutoTimer){ clearInterval(bonCommandeAutoTimer); bonCommandeAutoTimer = null; }
   }
 
   function openBonCommandeModal(){
     bonCommandeLignes = calculerProduitsAReapprovisionner();
     renderBonCommande();
     modalBonCommande.classList.add('show');
+    startBonCommandeAutoRefresh();
   }
-  function closeBonCommandeModal(){ modalBonCommande.classList.remove('show'); }
+  function closeBonCommandeModal(){ modalBonCommande.classList.remove('show'); stopBonCommandeAutoRefresh(); }
   document.getElementById('btnBonCommande').addEventListener('click', openBonCommandeModal);
   document.getElementById('btnCancelBonCommande').addEventListener('click', closeBonCommandeModal);
   modalBonCommande.addEventListener('click', e=>{ if(e.target===modalBonCommande) closeBonCommandeModal(); });
@@ -4561,6 +4742,7 @@
   renderPanier();
   renderAchats();
   renderDepenses();
+  renderMouvementsCaisse();
   renderCredits();
   renderRapports();
   renderJournalActivite();
