@@ -623,13 +623,14 @@
 
     <nav class="sb-nav" id="navList">
       <div class="nav-item active" data-page="dashboard"><span class="ic">●</span>Tableau de bord</div>
-      <div class="nav-item" data-page="chambres"><span class="ic">🛏</span>Chambres</div>
       <div class="nav-item" data-page="vendre"><span class="ic">○</span>Vente</div>
       <div class="nav-item" data-page="stock"><span class="ic">☰</span>Stock</div>
       <div class="nav-item" data-page="achats"><span class="ic">🛒</span>Achats fournisseurs</div>
       <div class="nav-item" data-page="depenses"><span class="ic">−</span>Dépenses</div>
       <div class="nav-item" data-page="credits"><span class="ic">✉</span>Crédits clients</div>
       <div class="nav-item" data-page="caisse"><span class="ic">▭</span>Caisse</div>
+      <div class="nav-item" data-page="chambres"><span class="ic">🛏</span>Chambres</div>
+      <div class="nav-item" data-page="caisse-chambres"><span class="ic">▭</span>Caisse chambres</div>
       <div class="nav-gap"></div>
       <div class="nav-item" data-page="rapports"><span class="ic">▲</span>Rapports</div>
       <div class="nav-item" data-page="journal"><span class="ic">✎</span>Journal d'activité</div>
@@ -959,6 +960,63 @@
           <div class="modal-actions">
             <button class="btn outline" id="btnCancelOccuper">Annuler</button>
             <button class="btn" id="btnSaveOccuper">Encaisser et occuper</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CAISSE CHAMBRES -->
+      <section class="page" id="page-caisse-chambres">
+        <div class="quick-nav"></div>
+        <div class="page-title">Caisse chambres</div>
+        <div class="page-sub">État de la caisse des recettes chambres et mouvements</div>
+        <div class="grid">
+          <div class="card caisse-especes">
+            <div class="stat-label">ESPÈCES</div>
+            <div class="stat-value small" id="caisseChEspeces">0<span class="stat-unit">GNF</span></div>
+          </div>
+          <div class="card caisse-om">
+            <div class="stat-label">ORANGE MONEY</div>
+            <div class="stat-value small" id="caisseChOM">0<span class="stat-unit">GNF</span></div>
+          </div>
+        </div>
+        <div class="subpage-toolbar">
+          <button class="btn" id="btnAddMouvementCaisseCh">+ Ajouter un mouvement</button>
+        </div>
+        <div class="page-sub" style="margin-top:10px;">Historique des mouvements manuels</div>
+        <div id="mouvementsCaisseChWrap"></div>
+      </section>
+
+      <!-- MODALE MOUVEMENT CAISSE CHAMBRES -->
+      <div class="modal-overlay" id="modalMouvementCaisseCh">
+        <div class="modal">
+          <div class="modal-title">Ajouter un mouvement de caisse chambres</div>
+          <div class="form-group">
+            <label>Type de mouvement</label>
+            <select id="mvtCaisseChType">
+              <option value="depot">Dépôt (entrée d'argent)</option>
+              <option value="retrait">Retrait (sortie d'argent)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Montant (GNF)</label>
+              <input type="number" id="mvtCaisseChMontant" placeholder="0" min="0">
+            </div>
+            <div class="form-group">
+              <label>Caisse concernée</label>
+              <select id="mvtCaisseChSource">
+                <option value="especes">Espèces</option>
+                <option value="orangeMoney">Orange Money</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Motif</label>
+            <input type="text" id="mvtCaisseChMotif" placeholder="Ex : Apport personnel, retrait pour banque...">
+          </div>
+          <div class="modal-actions">
+            <button class="btn outline" id="btnCancelMouvementCaisseCh">Annuler</button>
+            <button class="btn" id="btnSaveMouvementCaisseCh">Enregistrer</button>
           </div>
         </div>
       </div>
@@ -1688,10 +1746,10 @@ try{
   overlay.addEventListener('click', closeSidebar);
 
   // ---------- Data layer (localStorage for now, Firebase plus tard) ----------
-  const ALL_PAGES = ['dashboard','chambres','vendre','stock','achats','depenses','credits','caisse','rapports','journal','parametres'];
+  const ALL_PAGES = ['dashboard','vendre','stock','achats','depenses','credits','caisse','chambres','caisse-chambres','rapports','journal','parametres'];
   const PAGE_LABELS = {
-    dashboard:'Tableau de bord', chambres:'Chambres', vendre:'Vente', stock:'Stock',
-    achats:'Achats fournisseurs', depenses:'Dépenses', credits:'Crédits clients', caisse:'Caisse',
+    dashboard:'Tableau de bord', vendre:'Vente', stock:'Stock',
+    achats:'Achats fournisseurs', depenses:'Dépenses', credits:'Crédits clients', caisse:'Caisse', chambres:'Chambres', 'caisse-chambres':'Caisse chambres',
     rapports:'Rapports', journal:"Journal d'activité", parametres:'Paramètres'
   };
   const STORE_KEY = 'motelWifiSiguiri_v1';
@@ -1702,6 +1760,18 @@ try{
       if(!d.achats) d.achats = [];
       if(!d.chambres) d.chambres = [];
       if(!d.sejours) d.sejours = [];
+      if(!d.caisseChambres) d.caisseChambres = { especes:0, orangeMoney:0 };
+      if(!d.mouvementsCaisseChambres) d.mouvementsCaisseChambres = [];
+      // Migration : donner accès aux nouvelles pages (ex. "chambres") aux rôles qui avaient déjà accès à toutes les pages
+      if(d.params && d.params.permissions){
+        Object.keys(d.params.permissions).forEach(role=>{
+          const allowed = d.params.permissions[role];
+          if(Array.isArray(allowed) && allowed.includes('caisse') && allowed.includes('vendre')){
+            if(!allowed.includes('chambres')) allowed.push('chambres');
+            if(!allowed.includes('caisse-chambres')) allowed.push('caisse-chambres');
+          }
+        });
+      }
       // Migration : anciens achats mono-produit -> format multi-lignes
       d.achats.forEach(a=>{
         if(!a.lignes){
@@ -1716,6 +1786,8 @@ try{
     return {
       caisse: { especes:0, orangeMoney:0 },
       mouvementsCaisse: [],
+      caisseChambres: { especes:0, orangeMoney:0 },
+      mouvementsCaisseChambres: [],
       ventesJour: 0,
       vouchersVendus: 0,
       depensesJour: 0,
@@ -1758,7 +1830,7 @@ try{
           'Président Directeur Général': ALL_PAGES.slice(),
           'Directeur Général': ALL_PAGES.slice(),
           'Gérant': ALL_PAGES.filter(p=>p!=='parametres'),
-          'Caissier': ['dashboard','chambres','vendre','caisse','credits']
+          'Caissier': ['dashboard','chambres','caisse-chambres','vendre','caisse','credits']
         },
         firebase: { docId:'', autoSync:true }
       }
@@ -3663,11 +3735,12 @@ try{
       data.categories[p.categorie] = (data.categories[p.categorie]||0) + ca;
     });
 
-    // Encaissement
+    // Encaissement — vers la caisse chambres, séparée de la caisse boutique/bar
+    data.caisseChambres = data.caisseChambres || { especes:0, orangeMoney:0 };
     if(paiement === 'especes'){
-      data.caisse.especes += total;
+      data.caisseChambres.especes += total;
     } else if(paiement === 'orangeMoney'){
-      data.caisse.orangeMoney += total;
+      data.caisseChambres.orangeMoney += total;
     } else if(paiement === 'credit'){
       const existant = data.clientsCredits.find(cl=>cl.nom.toLowerCase()===clientNom.toLowerCase());
       if(existant){ existant.montant += total; }
@@ -3705,6 +3778,7 @@ try{
     closeOccuperModal();
     render();
     renderChambreGrid();
+    if(typeof renderCaisseChambres === 'function') renderCaisseChambres();
     logActivite('Check-in chambre', desc + ' — ' + fmt(total) + ' GNF (' + typeLabel + ') — Client : ' + clientNom);
     const recuData = {
       nom: data.params.nom || 'Motel Wifi Siguiri',
@@ -3735,6 +3809,91 @@ try{
   }
 
   renderChambreGrid();
+
+  // =========================================================
+  // MODULE CAISSE CHAMBRES (séparée de la caisse boutique/bar)
+  // =========================================================
+  function renderCaisseChambres(){
+    data.caisseChambres = data.caisseChambres || { especes:0, orangeMoney:0 };
+    const chEspecesEl = document.getElementById('caisseChEspeces');
+    if(chEspecesEl){
+      chEspecesEl.innerHTML = fmt(data.caisseChambres.especes) + '<span class="stat-unit">GNF</span>';
+      chEspecesEl.style.color = data.caisseChambres.especes < 0 ? 'var(--red)' : '';
+    }
+    const chOMEl = document.getElementById('caisseChOM');
+    if(chOMEl){
+      chOMEl.innerHTML = fmt(data.caisseChambres.orangeMoney) + '<span class="stat-unit">GNF</span>';
+      chOMEl.style.color = data.caisseChambres.orangeMoney < 0 ? 'var(--red)' : '';
+    }
+    renderMouvementsCaisseChambres();
+  }
+
+  function renderMouvementsCaisseChambres(){
+    const wrap = document.getElementById('mouvementsCaisseChWrap');
+    if(!wrap) return;
+    data.mouvementsCaisseChambres = data.mouvementsCaisseChambres || [];
+    const liste = [...data.mouvementsCaisseChambres].sort((a,b)=> new Date(b.date) - new Date(a.date));
+    if(!liste.length){
+      wrap.innerHTML = '<div class="empty"><div class="ic">🛏</div>Aucun mouvement manuel enregistré.</div>';
+      return;
+    }
+    const srcLabels = { especes:'Espèces', orangeMoney:'Orange Money' };
+    wrap.innerHTML = liste.map(m=>{
+      const dt = new Date(m.date);
+      const dateStr = isNaN(dt) ? '' : dt.toLocaleDateString('fr-FR') + ' à ' + dt.toLocaleTimeString('fr-FR',{hour:'2-digit', minute:'2-digit'});
+      const isDepot = m.type === 'depot';
+      const signe = isDepot ? '+' : '−';
+      const couleur = isDepot ? 'var(--green)' : 'var(--red)';
+      return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+        <div>
+          <div style="font-size:13.5px; font-weight:600;">${isDepot ? 'Dépôt' : 'Retrait'} — ${srcLabels[m.source]||m.source}</div>
+          <div style="font-size:12.5px; color:var(--text-faint); margin-top:2px;">${(m.motif||'').replace(/</g,'&lt;') || 'Sans motif précisé'}</div>
+          <div style="font-size:11.5px; color:var(--text-faint); margin-top:2px;">${dateStr}</div>
+        </div>
+        <div style="font-size:15px; font-weight:700; color:${couleur}; white-space:nowrap;">${signe} ${fmt(m.montant)} GNF</div>
+      </div>`;
+    }).join('');
+  }
+
+  const modalMouvementCaisseCh = document.getElementById('modalMouvementCaisseCh');
+  function openMouvementCaisseChModal(){
+    document.getElementById('mvtCaisseChType').value = 'depot';
+    document.getElementById('mvtCaisseChMontant').value = '';
+    document.getElementById('mvtCaisseChSource').value = 'especes';
+    document.getElementById('mvtCaisseChMotif').value = '';
+    modalMouvementCaisseCh.classList.add('show');
+  }
+  function closeMouvementCaisseChModal(){ modalMouvementCaisseCh.classList.remove('show'); }
+  document.getElementById('btnAddMouvementCaisseCh').addEventListener('click', openMouvementCaisseChModal);
+  document.getElementById('btnCancelMouvementCaisseCh').addEventListener('click', closeMouvementCaisseChModal);
+  modalMouvementCaisseCh.addEventListener('click', e=>{ if(e.target===modalMouvementCaisseCh) closeMouvementCaisseChModal(); });
+  document.getElementById('btnSaveMouvementCaisseCh').addEventListener('click', ()=>{
+    const type = document.getElementById('mvtCaisseChType').value;
+    const montant = Number(document.getElementById('mvtCaisseChMontant').value)||0;
+    const source = document.getElementById('mvtCaisseChSource').value;
+    const motif = document.getElementById('mvtCaisseChMotif').value.trim();
+    if(montant <= 0){ alert('Le montant doit être supérieur à 0.'); return; }
+    data.caisseChambres = data.caisseChambres || { especes:0, orangeMoney:0 };
+    if(type === 'retrait' && data.caisseChambres[source] < montant){
+      if(!confirm('Le solde ' + (source==='especes'?'Espèces':'Orange Money') + ' est insuffisant. Enregistrer quand même ?')) return;
+    }
+
+    const delta = type === 'depot' ? montant : -montant;
+    const payload = { id: uid(), type, montant, source, motif, date: new Date().toISOString() };
+    data.mouvementsCaisseChambres = data.mouvementsCaisseChambres || [];
+    data.mouvementsCaisseChambres.push(payload);
+    data.caisseChambres[source] += delta;
+
+    saveData(data);
+    closeMouvementCaisseChModal();
+    renderCaisseChambres();
+    logActivite(
+      (type==='depot' ? 'Dépôt caisse chambres' : 'Retrait caisse chambres'),
+      (motif ? motif + ' — ' : '') + fmt(montant) + ' GNF (' + (source==='especes'?'Espèces':'Orange Money') + ')'
+    );
+  });
+
+  renderCaisseChambres();
 
   // =========================================================
   // MODULE DEPENSES
