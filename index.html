@@ -2392,6 +2392,23 @@ try{
     ]);
   }
 
+  // Réessaie une opération réseau plusieurs fois avec un délai croissant (300ms, 900ms, 2700ms…)
+  // avant d'abandonner. Rend la synchro tolérante aux réseaux mobiles instables (2G/3G faible signal).
+  async function withRetry(fn, { retries = 3, baseDelay = 300, timeoutMs = 25000, timeoutMsg } = {}){
+    let lastErr;
+    for(let attempt = 0; attempt <= retries; attempt++){
+      try{
+        return await withTimeout(fn(), timeoutMs, timeoutMsg);
+      }catch(err){
+        lastErr = err;
+        if(attempt < retries){
+          await new Promise(res => setTimeout(res, baseDelay * Math.pow(3, attempt)));
+        }
+      }
+    }
+    throw lastErr;
+  }
+
   async function ensureFbReady(){
     if(!fbSdkReady || !window.__fb){
       console.warn('[Firebase] SDK non prêt. fbSdkReady=', fbSdkReady, 'window.__fb=', !!window.__fb);
@@ -2407,7 +2424,10 @@ try{
     const pin = currentFbPin();
     if(!pin) throw new Error("Merci de renseigner un code PIN (4 à 8 chiffres).");
     const ref = window.__fb.doc(db, 'motelWifiSauvegardes', docId);
-    const snap = await withTimeout(window.__fb.getDoc(ref), 15000, 'Vérification du code PIN trop lente — connexion instable.');
+    const snap = await withRetry(() => window.__fb.getDoc(ref), {
+      timeoutMs: 25000,
+      timeoutMsg: 'Vérification du code PIN trop lente — connexion instable.'
+    });
     if(snap.exists()){
       const remotePin = snap.data().pin;
       if(remotePin && remotePin !== pin){
@@ -2422,11 +2442,10 @@ try{
     const ref = await checkPinAndGetRef(db);
     const pin = currentFbPin();
     try{
-      await withTimeout(
-        window.__fb.setDoc(ref, { payload: JSON.stringify(data), pin, updatedAt: new Date().toISOString() }),
-        15000,
-        'La synchronisation prend trop de temps — connexion internet instable ou serveur inaccessible.'
-      );
+      await withRetry(() => window.__fb.setDoc(ref, { payload: JSON.stringify(data), pin, updatedAt: new Date().toISOString() }), {
+        timeoutMs: 25000,
+        timeoutMsg: 'La synchronisation prend trop de temps — connexion internet instable ou serveur inaccessible.'
+      });
     }catch(err){
       console.error('[Firebase] Échec syncToFirebase:', err);
       throw err;
@@ -2436,7 +2455,10 @@ try{
   async function restoreFromFirebase(){
     const db = await ensureFbReady();
     const ref = await checkPinAndGetRef(db);
-    const snap = await withTimeout(window.__fb.getDoc(ref), 15000, 'La restauration prend trop de temps — connexion internet instable ou serveur inaccessible.');
+    const snap = await withRetry(() => window.__fb.getDoc(ref), {
+      timeoutMs: 25000,
+      timeoutMsg: 'La restauration prend trop de temps — connexion internet instable ou serveur inaccessible.'
+    });
     if(!snap.exists()) throw new Error("Aucune sauvegarde trouvée pour cet identifiant.");
     const remote = JSON.parse(snap.data().payload);
     return remote;
@@ -2476,17 +2498,34 @@ try{
     }
   });
 
+  let fbSyncPending = false; // vrai si la dernière tentative a échoué et attend une reconnexion
   function scheduleAutoSync(){
     if(fbAutoSyncTimer) clearTimeout(fbAutoSyncTimer);
     fbAutoSyncTimer = setTimeout(async ()=>{
       try{
         await syncToFirebase();
+        fbSyncPending = false;
         setFbStatus('✓ Auto-synchronisé le ' + new Date().toLocaleString('fr-FR'));
       }catch(err){
-        setFbStatus('✗ Échec auto-sync : ' + (err && err.message ? err.message : 'erreur inconnue'), true);
+        fbSyncPending = true;
+        setFbStatus('✗ Échec auto-sync : ' + (err && err.message ? err.message : 'erreur inconnue') + ' — nouvelle tentative dès le retour du réseau.', true);
       }
     }, 3000);
   }
+
+  // Dès que la connexion revient (Wi-Fi/4G rétabli), on retente automatiquement
+  // toute synchronisation restée en échec — l'utilisateur n'a rien à faire.
+  window.addEventListener('online', async ()=>{
+    if(!fbSyncPending) return;
+    setFbStatus('Connexion rétablie — nouvelle tentative de synchronisation…');
+    try{
+      await syncToFirebase();
+      fbSyncPending = false;
+      setFbStatus('✓ Auto-synchronisé le ' + new Date().toLocaleString('fr-FR'));
+    }catch(err){
+      setFbStatus('✗ Toujours en échec : ' + (err && err.message ? err.message : 'erreur inconnue'), true);
+    }
+  });
 
   // ---------- SYNC TEMPS RÉEL MULTI-APPAREILS (stock, caisse, ventes) ----------
   // Principe : le stock et la caisse sont modifiés par increment()/decrement() atomiques
@@ -2495,7 +2534,7 @@ try{
   // documents ajoutés dans des sous-collections (jamais réécrits). Chaque appareil écoute
   // ces changements en direct via onSnapshot et met à jour l'affichage automatiquement.
 
-  let rtUnsubProduits = null, rtUnsubMain = null, rtUnsubVentes = null;
+  let rtUnsubProduits = null, rtUnsubMain = null, rtUnsubVentes = null, rtUnsubChambres = null, rtUnsubSejours = null;
   let rtEnabled = false;
   let rtApplyingRemote = false; // évite de re-déclencher une écriture pendant qu'on applique une mise à jour reçue
 
@@ -2518,6 +2557,16 @@ try{
     const docId = currentFbDocId();
     if(!fbSdkReady || !window.__fb || !docId) return null;
     return window.__fb.collection(window.__fb.db, 'motelWifiSauvegardes', docId, 'journalActivite');
+  }
+  function chambresColRef(){
+    const docId = currentFbDocId();
+    if(!fbSdkReady || !window.__fb || !docId) return null;
+    return window.__fb.collection(window.__fb.db, 'motelWifiSauvegardes', docId, 'chambres');
+  }
+  function sejoursColRef(){
+    const docId = currentFbDocId();
+    if(!fbSdkReady || !window.__fb || !docId) return null;
+    return window.__fb.collection(window.__fb.db, 'motelWifiSauvegardes', docId, 'sejours');
   }
 
   // ----- Écritures atomiques -----
@@ -2558,6 +2607,35 @@ try{
     const col = journalColRef();
     if(!col) return;
     await window.__fb.addDoc(col, { ...entry, pin: currentFbPin(), createdAt: window.__fb.serverTimestamp() }).catch(()=>{});
+  }
+
+  async function rtSyncChambreComplete(chambre){
+    // Utilisé à la création/modification/changement de statut d'une chambre
+    const ref = window.__fb.doc(chambresColRef(), chambre.id);
+    await window.__fb.setDoc(ref, { ...chambre, pin: currentFbPin() }, { merge: true }).catch(()=>{});
+  }
+
+  async function rtAjouterSejour(sejour){
+    // Check-in : nouveau document de séjour (jamais réécrit par un autre appareil)
+    const ref = window.__fb.doc(sejoursColRef(), sejour.id);
+    await window.__fb.setDoc(ref, { ...sejour, pin: currentFbPin() }).catch(()=>{});
+  }
+
+  async function rtMettreAJourSejour(sejour){
+    // Check-out : met à jour le même document de séjour (checkOut renseigné)
+    const ref = window.__fb.doc(sejoursColRef(), sejour.id);
+    await window.__fb.setDoc(ref, { ...sejour, pin: currentFbPin() }, { merge: true }).catch(()=>{});
+  }
+
+  async function rtCreditCaisseChambres(paiement, montant){
+    if(paiement !== 'especes' && paiement !== 'orangeMoney') return;
+    const ref = mainDocRef();
+    if(!ref) return;
+    const champ = paiement === 'especes' ? 'caisseChambres.especes' : 'caisseChambres.orangeMoney';
+    await window.__fb.updateDoc(ref, {
+      [champ]: window.__fb.increment(montant),
+      pin: currentFbPin()
+    }).catch(()=>{});
   }
 
   async function rtSyncProduitComplet(produit){
@@ -2612,10 +2690,16 @@ try{
         data.caisse.especes = d.caisse.especes || 0;
         data.caisse.orangeMoney = d.caisse.orangeMoney || 0;
       }
+      if(d.caisseChambres){
+        data.caisseChambres = data.caisseChambres || { especes:0, orangeMoney:0 };
+        data.caisseChambres.especes = d.caisseChambres.especes || 0;
+        data.caisseChambres.orangeMoney = d.caisseChambres.orangeMoney || 0;
+      }
       if(typeof d.ventesJour === 'number') data.ventesJour = d.ventesJour;
       if(typeof d.ticketsJour === 'number') data.ticketsJour = d.ticketsJour;
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
       if(typeof render === 'function') render();
+      if(typeof renderCaisseChambres === 'function') renderCaisseChambres();
       rtApplyingRemote = false;
     }, ()=>{});
 
@@ -2656,12 +2740,53 @@ try{
       }
     }, ()=>{});
     window.__rtUnsubJournal = rtUnsubJournal;
+
+    // Chambres : statut (libre/occupée/nettoyage/hors service), prix, notes — en direct sur tous les appareils
+    rtUnsubChambres = window.__fb.onSnapshot(chambresColRef(), (snap)=>{
+      rtApplyingRemote = true;
+      snap.docChanges().forEach(change=>{
+        const d = change.doc.data();
+        const idx = data.chambres.findIndex(c=>c.id===change.doc.id);
+        if(change.type === 'removed' || d.supprime){
+          if(idx !== -1) data.chambres.splice(idx,1);
+        } else {
+          const chambreMaj = { ...d, id: change.doc.id };
+          if(idx !== -1) data.chambres[idx] = chambreMaj;
+          else data.chambres.push(chambreMaj);
+        }
+      });
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+      if(typeof renderChambreGrid === 'function') renderChambreGrid();
+      rtApplyingRemote = false;
+    }, ()=>{ /* erreur silencieuse : reste sur les données locales */ });
+
+    // Séjours : check-in / check-out — en direct sur tous les appareils
+    rtUnsubSejours = window.__fb.onSnapshot(sejoursColRef(), (snap)=>{
+      rtApplyingRemote = true;
+      snap.docChanges().forEach(change=>{
+        const d = change.doc.data();
+        data.sejours = data.sejours || [];
+        const idx = data.sejours.findIndex(s=>s.id===change.doc.id);
+        if(change.type === 'removed'){
+          if(idx !== -1) data.sejours.splice(idx,1);
+        } else {
+          const sejourMaj = { ...d, id: change.doc.id };
+          if(idx !== -1) data.sejours[idx] = sejourMaj;
+          else data.sejours.push(sejourMaj);
+        }
+      });
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+      if(typeof renderChambreGrid === 'function') renderChambreGrid();
+      rtApplyingRemote = false;
+    }, ()=>{ /* erreur silencieuse : reste sur les données locales */ });
   }
 
   function stopRealtimeSync(){
     if(rtUnsubProduits) rtUnsubProduits();
     if(rtUnsubMain) rtUnsubMain();
     if(rtUnsubVentes) rtUnsubVentes();
+    if(rtUnsubChambres) rtUnsubChambres();
+    if(rtUnsubSejours) rtUnsubSejours();
     if(window.__rtUnsubJournal) window.__rtUnsubJournal();
     rtEnabled = false;
   }
@@ -3608,16 +3733,20 @@ try{
     if(!numero){ alert('Le numéro / nom de la chambre est requis.'); return; }
     const doublon = data.chambres.find(c=>c.numero.toLowerCase()===numero.toLowerCase() && c.id!==id);
     if(doublon){ alert('Une chambre avec ce numéro existe déjà.'); return; }
+    let chambrePayload;
     if(id){
       const idx = data.chambres.findIndex(c=>c.id===id);
       data.chambres[idx] = { ...data.chambres[idx], numero, prix, note };
+      chambrePayload = data.chambres[idx];
     } else {
-      data.chambres.push({ id: uid(), numero, prix, note, statut:'libre' });
+      chambrePayload = { id: uid(), numero, prix, note, statut:'libre' };
+      data.chambres.push(chambrePayload);
     }
     saveData(data);
     closeChambreModal();
     renderChambreGrid();
     logActivite(id ? 'Chambre modifiée' : 'Chambre ajoutée', numero);
+    if(rtEnabled) rtSyncChambreComplete(chambrePayload);
   });
 
   // ---------- Menu d'action sur une chambre (selon statut) ----------
@@ -3635,6 +3764,7 @@ try{
         c.statut = 'libre';
         saveData(data); renderChambreGrid();
         logActivite('Chambre disponible', c.numero + ' — nettoyage terminé');
+        if(rtEnabled) rtSyncChambreComplete(c);
       } else if(confirm('Ou modifier les informations de cette chambre ?')){
         openChambreModal(id);
       }
@@ -3643,6 +3773,7 @@ try{
         c.statut = 'libre';
         saveData(data); renderChambreGrid();
         logActivite('Chambre remise en service', c.numero);
+        if(rtEnabled) rtSyncChambreComplete(c);
       }
     }
   }
@@ -3780,6 +3911,11 @@ try{
     renderChambreGrid();
     if(typeof renderCaisseChambres === 'function') renderCaisseChambres();
     logActivite('Check-in chambre', desc + ' — ' + fmt(total) + ' GNF (' + typeLabel + ') — Client : ' + clientNom);
+    if(rtEnabled){
+      rtAjouterSejour(sejour);
+      rtSyncChambreComplete(c);
+      rtCreditCaisseChambres(paiement, total);
+    }
     const recuData = {
       nom: data.params.nom || 'Motel Wifi Siguiri',
       date: new Date(),
@@ -3806,6 +3942,10 @@ try{
     render();
     renderChambreGrid();
     logActivite('Check-out chambre', 'Chambre ' + s.chambreNumero + ' — Client : ' + s.clientNom + ' → statut Nettoyage');
+    if(rtEnabled){
+      rtMettreAJourSejour(s);
+      if(c) rtSyncChambreComplete(c);
+    }
   }
 
   renderChambreGrid();
@@ -3891,6 +4031,7 @@ try{
       (type==='depot' ? 'Dépôt caisse chambres' : 'Retrait caisse chambres'),
       (motif ? motif + ' — ' : '') + fmt(montant) + ' GNF (' + (source==='especes'?'Espèces':'Orange Money') + ')'
     );
+    if(rtEnabled) rtCreditCaisseChambres(source, delta);
   });
 
   renderCaisseChambres();
