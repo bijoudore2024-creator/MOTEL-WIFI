@@ -1429,6 +1429,11 @@
             <label style="font-size:11px; letter-spacing:1px; color:var(--text-faint); font-weight:700; display:block; margin-bottom:8px;">IDENTIFIANT DE SAUVEGARDE</label>
             <input id="fbDocId" placeholder="ex: motel-siguiri-01" style="width:100%; background:var(--bg-elev2); border:1px solid var(--border); color:var(--text); padding:12px 14px; border-radius:9px; font-size:13px;">
           </div>
+          <div style="margin-bottom:14px;">
+            <label style="font-size:11px; letter-spacing:1px; color:var(--text-faint); font-weight:700; display:block; margin-bottom:8px;">CODE PIN (4 à 8 chiffres)</label>
+            <input id="fbPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="ex: 4821" style="width:100%; background:var(--bg-elev2); border:1px solid var(--border); color:var(--text); padding:12px 14px; border-radius:9px; font-size:13px;">
+            <div style="font-size:11px; color:var(--text-faint); margin-top:6px;">Protège l'accès à cette sauvegarde. Renseigne le même code sur tous les appareils de cet établissement.</div>
+          </div>
           <div id="fbSyncStatus" style="font-size:12px; color:var(--text-faint); margin-bottom:14px;">Non connecté.</div>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
             <button class="btn outline" id="btnFbSyncNow">☁ Synchroniser maintenant</button>
@@ -2139,14 +2144,22 @@ try{
       .replace(/^-+|-+$/g,'') || 'motel';
   }
 
+  function genIdUnique(str){
+    // Identifiant non-devinable : slug lisible + suffixe aléatoire.
+    // Empêche deux motels différents de tomber sur le même docId Firestore.
+    const rnd = Math.random().toString(36).slice(2, 8);
+    return slugify(str) + '-' + rnd;
+  }
+
   function fillFirebaseForm(){
     const cfg = data.params.firebase || {};
     if(!cfg.docId){
-      cfg.docId = slugify(data.params.nom);
+      cfg.docId = genIdUnique(data.params.nom);
       data.params.firebase = cfg;
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
     }
     document.getElementById('fbDocId').value = cfg.docId || '';
+    document.getElementById('fbPin').value = cfg.pin || '';
     document.getElementById('fbAutoSync').checked = cfg.autoSync !== false; // activé par défaut
     setFbStatus('Prêt. Sauvegarde automatique activée.');
   }
@@ -2161,14 +2174,20 @@ try{
     return document.getElementById('fbDocId').value.trim();
   }
 
+  function currentFbPin(){
+    return document.getElementById('fbPin').value.trim();
+  }
+
   function persistFbSettings(){
     data.params.firebase = data.params.firebase || {};
     data.params.firebase.docId = currentFbDocId();
+    data.params.firebase.pin = currentFbPin();
     data.params.firebase.autoSync = document.getElementById('fbAutoSync').checked;
     localStorage.setItem(STORE_KEY, JSON.stringify(data)); // écriture directe pour éviter de redéclencher une auto-sync en boucle
   }
 
   document.getElementById('fbDocId').addEventListener('change', persistFbSettings);
+  document.getElementById('fbPin').addEventListener('change', persistFbSettings);
   document.getElementById('fbAutoSync').addEventListener('change', persistFbSettings);
 
   function withTimeout(promise, ms, msg){
@@ -2188,13 +2207,28 @@ try{
     return window.__fb.db;
   }
 
+  async function checkPinAndGetRef(db, { requirePinIfNew } = {}){
+    const docId = currentFbDocId();
+    const pin = currentFbPin();
+    if(!pin) throw new Error("Merci de renseigner un code PIN (4 à 8 chiffres).");
+    const ref = window.__fb.doc(db, 'motelWifiSauvegardes', docId);
+    const snap = await withTimeout(window.__fb.getDoc(ref), 15000, 'Vérification du code PIN trop lente — connexion instable.');
+    if(snap.exists()){
+      const remotePin = snap.data().pin;
+      if(remotePin && remotePin !== pin){
+        throw new Error("Code PIN incorrect pour cet identifiant de sauvegarde.");
+      }
+    }
+    return ref;
+  }
+
   async function syncToFirebase(){
     const db = await ensureFbReady();
-    const docId = currentFbDocId();
-    const ref = window.__fb.doc(db, 'motelWifiSauvegardes', docId);
+    const ref = await checkPinAndGetRef(db);
+    const pin = currentFbPin();
     try{
       await withTimeout(
-        window.__fb.setDoc(ref, { payload: JSON.stringify(data), updatedAt: new Date().toISOString() }),
+        window.__fb.setDoc(ref, { payload: JSON.stringify(data), pin, updatedAt: new Date().toISOString() }),
         15000,
         'La synchronisation prend trop de temps — connexion internet instable ou serveur inaccessible.'
       );
@@ -2206,8 +2240,7 @@ try{
 
   async function restoreFromFirebase(){
     const db = await ensureFbReady();
-    const docId = currentFbDocId();
-    const ref = window.__fb.doc(db, 'motelWifiSauvegardes', docId);
+    const ref = await checkPinAndGetRef(db);
     const snap = await withTimeout(window.__fb.getDoc(ref), 15000, 'La restauration prend trop de temps — connexion internet instable ou serveur inaccessible.');
     if(!snap.exists()) throw new Error("Aucune sauvegarde trouvée pour cet identifiant.");
     const remote = JSON.parse(snap.data().payload);
@@ -2232,10 +2265,13 @@ try{
     if(!confirm('Cela va remplacer toutes les données actuelles sur cet appareil par la dernière sauvegarde cloud. Continuer ?')) return;
     setFbStatus('Restauration en cours…');
     try{
+      const docId = currentFbDocId(), pin = currentFbPin();
       const remote = await restoreFromFirebase();
       data = remote;
       if(!data.categoriesPerso) data.categoriesPerso = [];
-      if(!data.params.firebase) data.params.firebase = { docId: currentFbDocId(), autoSync: true };
+      if(!data.params.firebase) data.params.firebase = { autoSync: true };
+      data.params.firebase.docId = docId; // conserve l'identifiant utilisé pour cette restauration
+      data.params.firebase.pin = pin;     // conserve le PIN saisi localement
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
       setFbStatus('✓ Restauré le ' + new Date().toLocaleString('fr-FR'));
       alert('Données restaurées. La page va se recharger.');
@@ -2290,12 +2326,16 @@ try{
   }
 
   // ----- Écritures atomiques -----
+  // Chaque écriture inclut le champ "pin" : les règles Firestore le
+  // comparent au pin stocké sur le document principal avant d'autoriser
+  // l'écriture (voir firestore.rules).
 
   async function rtVendreProduits(ventesParProduit){
     // Décrémente chaque produit vendu de façon atomique (jamais de conflit entre appareils)
+    const pin = currentFbPin();
     const proms = Object.entries(ventesParProduit).map(([id, v])=>{
       const ref = window.__fb.doc(produitsColRef(), id);
-      return window.__fb.updateDoc(ref, { qte: window.__fb.increment(-v.qte) }).catch(()=>{});
+      return window.__fb.updateDoc(ref, { qte: window.__fb.increment(-v.qte), pin }).catch(()=>{});
     });
     await Promise.all(proms);
   }
@@ -2308,38 +2348,45 @@ try{
     await window.__fb.updateDoc(ref, {
       [champ]: window.__fb.increment(montant),
       ventesJour: window.__fb.increment(montant),
-      ticketsJour: window.__fb.increment(1)
+      ticketsJour: window.__fb.increment(1),
+      pin: currentFbPin()
     }).catch(()=>{});
   }
 
   async function rtAjouterVente(vente){
     const col = ventesColRef();
     if(!col) return;
-    await window.__fb.addDoc(col, { ...vente, createdAt: window.__fb.serverTimestamp() }).catch(()=>{});
+    await window.__fb.addDoc(col, { ...vente, pin: currentFbPin(), createdAt: window.__fb.serverTimestamp() }).catch(()=>{});
   }
 
   async function rtAjouterJournal(entry){
     const col = journalColRef();
     if(!col) return;
-    await window.__fb.addDoc(col, { ...entry, createdAt: window.__fb.serverTimestamp() }).catch(()=>{});
+    await window.__fb.addDoc(col, { ...entry, pin: currentFbPin(), createdAt: window.__fb.serverTimestamp() }).catch(()=>{});
   }
 
   async function rtSyncProduitComplet(produit){
     // Utilisé à la création/modification d'un produit (nom, prix, catégorie, photo) — pas pour la vente
     const ref = window.__fb.doc(produitsColRef(), produit.id);
-    await window.__fb.setDoc(ref, produit, { merge: true }).catch(()=>{});
+    await window.__fb.setDoc(ref, { ...produit, pin: currentFbPin() }, { merge: true }).catch(()=>{});
   }
 
   async function rtSupprimerProduit(id){
     const ref = window.__fb.doc(produitsColRef(), id);
-    await window.__fb.setDoc(ref, { supprime: true, qte: 0 }, { merge: true }).catch(()=>{});
+    await window.__fb.setDoc(ref, { supprime: true, qte: 0, pin: currentFbPin() }, { merge: true }).catch(()=>{});
   }
 
   // ----- Écoute en direct -----
 
-  function startRealtimeSync(){
+  async function startRealtimeSync(){
     if(rtEnabled) return;
     if(!fbSdkReady || !window.__fb || !currentFbDocId()) return;
+    try{
+      await checkPinAndGetRef(window.__fb.db); // le serveur (règles Firestore) fait la vraie vérification ; ceci évite juste une désync visible côté client
+    }catch(err){
+      setFbStatus('✗ ' + (err && err.message ? err.message : 'PIN invalide'), true);
+      return;
+    }
     rtEnabled = true;
 
     // Produits : chaque changement de stock/prix/nom depuis n'importe quel appareil met à jour l'affichage
@@ -2525,11 +2572,13 @@ try{
       // Initialise le document principal (caisse/compteurs) s'il n'existe pas encore côté cloud
       const mainRef = mainDocRef();
       const mainSnap = await window.__fb.getDoc(mainRef);
+      const pin = currentFbPin();
       if(!mainSnap.exists()){
         await window.__fb.setDoc(mainRef, {
           caisse: { especes: data.caisse.especes||0, orangeMoney: data.caisse.orangeMoney||0 },
           ventesJour: data.ventesJour||0,
           ticketsJour: data.ticketsJour||0,
+          pin,
           updatedAt: new Date().toISOString()
         }, { merge:true });
       }
@@ -2539,9 +2588,9 @@ try{
       const seedSnap = await window.__fb.getDoc(seedFlagRef);
       if(!seedSnap.exists() && data.produits.length){
         await Promise.all(data.produits.map(p=>
-          window.__fb.setDoc(window.__fb.doc(produitsColRef(), p.id), p, { merge:true })
+          window.__fb.setDoc(window.__fb.doc(produitsColRef(), p.id), { ...p, pin }, { merge:true })
         ));
-        await window.__fb.setDoc(seedFlagRef, { seededAt: new Date().toISOString() });
+        await window.__fb.setDoc(seedFlagRef, { seededAt: new Date().toISOString(), pin });
       }
       startRealtimeSync();
     }catch(err){
