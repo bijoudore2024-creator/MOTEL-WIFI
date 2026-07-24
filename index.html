@@ -182,6 +182,27 @@
   .badge.red{background:rgba(229,72,77,.15); color:var(--red);}
   .badge.green{background:rgba(62,207,142,.15); color:var(--green);}
 
+  /* --- Page Caisse : fond dégradé + cartes colorées --- */
+  #page-caisse{
+    background:
+      radial-gradient(circle at 15% 0%, rgba(245,197,66,.10), transparent 55%),
+      radial-gradient(circle at 85% 100%, rgba(46,232,154,.08), transparent 55%);
+    border-radius:var(--radius);
+    padding:18px;
+    margin:0 -18px;
+  }
+  .card.caisse-especes{
+    background:linear-gradient(145deg, rgba(46,232,154,.14), var(--bg-elev));
+    border-color:rgba(46,232,154,.35);
+  }
+  .card.caisse-om{
+    background:linear-gradient(145deg, rgba(245,140,45,.16), var(--bg-elev));
+    border-color:rgba(245,140,45,.35);
+  }
+  .card.caisse-especes .stat-value, .card.caisse-om .stat-value{color:var(--text);}
+  .card.caisse-especes .stat-label{color:var(--green);}
+  .card.caisse-om .stat-label{color:#F58C2D;}
+
   /* =========================================================
      RESPONSIVE — mobile, tablette, desktop, écrans pliables
      ========================================================= */
@@ -412,7 +433,7 @@
   .footer-bar .fb-right{display:flex; align-items:center; gap:14px;}
   .ver-badge{background:var(--bg-elev2); border:1px solid var(--border); border-radius:7px; padding:3px 9px; font-family:'JetBrains Mono',monospace;}
 
-  /* ---------- Sous-onglets (Stock & casiers) ---------- */
+  /* ---------- Sous-onglets ---------- */
   .subtabs{display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border);}
   .subtab{
     padding:10px 18px; font-size:14px; font-weight:700; color:var(--text-dim);
@@ -587,8 +608,8 @@
 
     <nav class="sb-nav" id="navList">
       <div class="nav-item active" data-page="dashboard"><span class="ic">●</span>Tableau de bord</div>
-      <div class="nav-item" data-page="vendre"><span class="ic">○</span>Vendre</div>
-      <div class="nav-item" data-page="stock"><span class="ic">☰</span>Stock &amp; casiers</div>
+      <div class="nav-item" data-page="vendre"><span class="ic">○</span>Vente</div>
+      <div class="nav-item" data-page="stock"><span class="ic">☰</span>Stock</div>
       <div class="nav-item" data-page="achats"><span class="ic">🛒</span>Achats fournisseurs</div>
       <div class="nav-item" data-page="depenses"><span class="ic">−</span>Dépenses</div>
       <div class="nav-item" data-page="credits"><span class="ic">✉</span>Crédits clients</div>
@@ -713,7 +734,6 @@
             <div class="panel-title"><span>RÉSUMÉ RAPIDE</span></div>
             <div class="resume-list">
               <div class="resume-item"><div class="resume-ic">📦</div><div class="r-lbl">Produits en stock</div><div class="r-val" id="resProduits">0</div></div>
-              <div class="resume-item"><div class="resume-ic">🗄</div><div class="r-lbl">Casiers occupés</div><div class="r-val" id="resCasiers">0 / 0</div></div>
               <div class="resume-item"><div class="resume-ic">👥</div><div class="r-lbl">Clients actifs</div><div class="r-val" id="resClients">0</div></div>
               <div class="resume-item"><div class="resume-ic">🏷</div><div class="r-lbl">Tickets aujourd'hui</div><div class="r-val" id="resTickets">0</div></div>
               <div class="resume-item"><div class="resume-ic">🛒</div><div class="r-lbl">Panier moyen</div><div class="r-val" id="resPanier">0 GNF</div></div>
@@ -827,7 +847,7 @@
       <!-- VENDRE -->
       <section class="page" id="page-vendre">
         <div class="quick-nav"></div>
-        <div class="page-title">Vendre</div>
+        <div class="page-title">Vente</div>
         <div class="page-sub">Vente de chambres, bar et articles divers</div>
 
         <div class="vendre-layout">
@@ -885,13 +905,8 @@
       <!-- STOCK -->
       <section class="page" id="page-stock">
         <div class="quick-nav"></div>
-        <div class="page-title">Stock &amp; casiers</div>
-        <div class="page-sub">Gestion des casiers et du stock (bar, dépôt boissons, divers)</div>
-
-        <div class="subtabs">
-          <div class="subtab active" data-sub="produits">Produits</div>
-          <div class="subtab" data-sub="casiers">Casiers</div>
-        </div>
+        <div class="page-title">Stock</div>
+        <div class="page-sub">Gestion du stock (bar, dépôt boissons, divers)</div>
 
         <!-- SOUS-PAGE PRODUITS -->
         <div class="subpage active" id="sub-produits">
@@ -905,14 +920,6 @@
             <button class="btn" id="btnAddProduit2">+ Ajouter un produit</button>
           </div>
           <div id="produitsWrap"></div>
-        </div>
-
-        <!-- SOUS-PAGE CASIERS -->
-        <div class="subpage" id="sub-casiers">
-          <div class="subpage-toolbar">
-            <button class="btn" id="btnAddCasier2">+ Créer un casier</button>
-          </div>
-          <div id="casiersWrap"></div>
         </div>
       </section>
 
@@ -976,47 +983,6 @@
           <div class="modal-actions">
             <button class="btn outline" id="btnCancelProduit">Annuler</button>
             <button class="btn" id="btnSaveProduit">Enregistrer</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- MODALE CASIER -->
-      <div class="modal-overlay" id="modalCasier">
-        <div class="modal">
-          <div class="modal-title" id="modalCasierTitle">Créer un casier</div>
-          <input type="hidden" id="casierId">
-          <div class="form-group">
-            <label>Numéro / nom du casier</label>
-            <input type="text" id="casierNom" placeholder="Ex : Casier 12">
-          </div>
-          <div class="form-group">
-            <label>Statut</label>
-            <select id="casierStatut">
-              <option value="libre">Libre</option>
-              <option value="occupe">Occupé</option>
-            </select>
-          </div>
-          <div class="form-group" id="grpCasierClient">
-            <label>Client actuel</label>
-            <input type="text" id="casierClient" placeholder="Nom du client">
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Prix de location (GNF)</label>
-              <input type="number" id="casierPrix" placeholder="0" min="0">
-            </div>
-            <div class="form-group">
-              <label>Date de début</label>
-              <input type="date" id="casierDebut">
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Date de fin</label>
-            <input type="date" id="casierFin">
-          </div>
-          <div class="modal-actions">
-            <button class="btn outline" id="btnCancelCasier">Annuler</button>
-            <button class="btn" id="btnSaveCasier">Enregistrer</button>
           </div>
         </div>
       </div>
@@ -1247,11 +1213,11 @@
         <div class="page-title">Caisse</div>
         <div class="page-sub">État de la caisse et mouvements</div>
         <div class="grid">
-          <div class="card">
+          <div class="card caisse-especes">
             <div class="stat-label">ESPÈCES</div>
             <div class="stat-value small" id="caisseEspeces">0<span class="stat-unit">GNF</span></div>
           </div>
-          <div class="card">
+          <div class="card caisse-om">
             <div class="stat-label">ORANGE MONEY</div>
             <div class="stat-value small" id="caisseOM">0<span class="stat-unit">GNF</span></div>
           </div>
@@ -1554,7 +1520,7 @@
   // ---------- Data layer (localStorage for now, Firebase plus tard) ----------
   const ALL_PAGES = ['dashboard','vendre','stock','achats','depenses','credits','caisse','rapports','journal','parametres'];
   const PAGE_LABELS = {
-    dashboard:'Tableau de bord', vendre:'Vendre', stock:'Stock & casiers',
+    dashboard:'Tableau de bord', vendre:'Vente', stock:'Stock',
     achats:'Achats fournisseurs', depenses:'Dépenses', credits:'Crédits clients', caisse:'Caisse',
     rapports:'Rapports', journal:"Journal d'activité", parametres:'Paramètres'
   };
@@ -1749,7 +1715,6 @@
 
     // Résumé rapide
     document.getElementById('resProduits').textContent = data.produitsStock;
-    document.getElementById('resCasiers').textContent = data.casiersOccupes + ' / ' + data.casiersTotal;
     document.getElementById('resClients').textContent = data.clientsActifs;
     document.getElementById('resTickets').textContent = data.ticketsJour;
     const panierMoyen = data.ticketsJour > 0 ? Math.round(data.ventesJour / data.ticketsJour) : 0;
@@ -2677,20 +2642,8 @@
   });
 
   // =========================================================
-  // MODULE STOCK & CASIERS
+  // MODULE STOCK
   // =========================================================
-
-  // ---------- Sous-onglets Produits / Casiers ----------
-  const subtabs = document.querySelectorAll('.subtab[data-sub]');
-  const subpages = document.querySelectorAll('.subpage');
-  subtabs.forEach(tab=>{
-    tab.addEventListener('click', ()=>{
-      subtabs.forEach(t=>t.classList.remove('active'));
-      tab.classList.add('active');
-      subpages.forEach(p=>p.classList.remove('active'));
-      document.getElementById('sub-'+tab.dataset.sub).classList.add('active');
-    });
-  });
 
   function uid(){ return 'id'+Date.now()+Math.floor(Math.random()*1000); }
 
@@ -2776,48 +2729,6 @@
           if(typeof renderProdGrid === 'function') renderProdGrid();
           if(typeof renderPanier === 'function') renderPanier();
           if(rtEnabled) rtSupprimerProduit(idASupprimer);
-        }
-      });
-    });
-  }
-
-  // ---------- Rendu tableau CASIERS ----------
-  function renderCasiers(){
-    const wrap = document.getElementById('casiersWrap');
-    if(!data.casiers.length){
-      wrap.innerHTML = `<div class="empty"><div class="ic">🗄</div>Aucun casier créé.<br>
-        <button class="btn" style="margin-top:18px;" id="btnAddCasierEmpty">+ Créer un casier</button></div>`;
-      document.getElementById('btnAddCasierEmpty').addEventListener('click', ()=>openCasierModal());
-      return;
-    }
-    let rows = data.casiers.map(c=>{
-      const badge = c.statut==='occupe' ? '<span class="badge red">Occupé</span>' : '<span class="badge green">Libre</span>';
-      return `<tr>
-        <td>${c.nom}</td>
-        <td>${badge}</td>
-        <td>${c.client || '—'}</td>
-        <td class="mono">${c.prix ? fmt(c.prix)+' GNF' : '—'}</td>
-        <td>${c.debut||'—'} → ${c.fin||'—'}</td>
-        <td>
-          <div class="row-actions">
-            <div class="icon-action" data-edit-cas="${c.id}" title="Modifier">✎</div>
-            <div class="icon-action danger" data-del-cas="${c.id}" title="Supprimer">✕</div>
-          </div>
-        </td>
-      </tr>`;
-    }).join('');
-    wrap.innerHTML = `<div class="data-card"><table>
-      <thead><tr><th>CASIER</th><th>STATUT</th><th>CLIENT</th><th>PRIX</th><th>PÉRIODE</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`;
-    wrap.querySelectorAll('[data-edit-cas]').forEach(el=>{
-      el.addEventListener('click', ()=>openCasierModal(el.dataset.editCas));
-    });
-    wrap.querySelectorAll('[data-del-cas]').forEach(el=>{
-      el.addEventListener('click', ()=>{
-        if(confirm('Supprimer ce casier ?')){
-          data.casiers = data.casiers.filter(c=>c.id!==el.dataset.delCas);
-          saveData(data); render(); renderCasiers();
         }
       });
     });
@@ -2982,54 +2893,6 @@
     render(); renderProduits();
     if(typeof renderProdGrid === 'function') renderProdGrid();
     if(rtEnabled) rtSyncProduitComplet(payload);
-  });
-
-  // ---------- Modale CASIER ----------
-  const modalCasier = document.getElementById('modalCasier');
-  document.getElementById('casierStatut').addEventListener('change', updateCasierClientVisibility);
-  function updateCasierClientVisibility(){
-    const occ = document.getElementById('casierStatut').value === 'occupe';
-    document.getElementById('grpCasierClient').style.display = occ ? '' : 'none';
-  }
-  function openCasierModal(id){
-    const c = id ? data.casiers.find(x=>x.id===id) : null;
-    document.getElementById('modalCasierTitle').textContent = c ? 'Modifier le casier' : 'Créer un casier';
-    document.getElementById('casierId').value = c ? c.id : '';
-    document.getElementById('casierNom').value = c ? c.nom : '';
-    document.getElementById('casierStatut').value = c ? c.statut : 'libre';
-    document.getElementById('casierClient').value = c ? (c.client||'') : '';
-    document.getElementById('casierPrix').value = c ? (c.prix||'') : '';
-    document.getElementById('casierDebut').value = c ? (c.debut||'') : '';
-    document.getElementById('casierFin').value = c ? (c.fin||'') : '';
-    updateCasierClientVisibility();
-    modalCasier.classList.add('show');
-  }
-  function closeCasierModal(){ modalCasier.classList.remove('show'); }
-  document.getElementById('btnAddCasier2').addEventListener('click', ()=>openCasierModal());
-  document.getElementById('btnCancelCasier').addEventListener('click', closeCasierModal);
-  modalCasier.addEventListener('click', e=>{ if(e.target===modalCasier) closeCasierModal(); });
-  document.getElementById('btnSaveCasier').addEventListener('click', ()=>{
-    const nom = document.getElementById('casierNom').value.trim();
-    if(!nom){ alert('Le nom du casier est requis.'); return; }
-    const id = document.getElementById('casierId').value;
-    const payload = {
-      id: id || uid(),
-      nom,
-      statut: document.getElementById('casierStatut').value,
-      client: document.getElementById('casierClient').value.trim(),
-      prix: Number(document.getElementById('casierPrix').value)||0,
-      debut: document.getElementById('casierDebut').value,
-      fin: document.getElementById('casierFin').value
-    };
-    if(id){
-      const idx = data.casiers.findIndex(c=>c.id===id);
-      data.casiers[idx] = payload;
-    } else {
-      data.casiers.push(payload);
-    }
-    saveData(data);
-    closeCasierModal();
-    render(); renderCasiers();
   });
 
   // =========================================================
@@ -3766,17 +3629,22 @@
       <thead><tr><th>PRODUIT</th><th>STOCK / SEUIL</th><th>QTÉ À COMMANDER</th><th>PRIX UNIT. EST. (GNF)</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
-    <div style="font-size:14px; font-weight:700; margin-top:12px;">Total estimé : <span class="mono" style="color:var(--gold);">${fmt(montantEstime)} GNF</span></div>`;
+    <div style="font-size:14px; font-weight:700; margin-top:12px;">Total estimé : <span class="mono bon-total-val" style="color:var(--gold);">${fmt(montantEstime)} GNF</span></div>`;
+    const totalEl = wrap.querySelector('.bon-total-val');
+    function refreshTotal(){
+      const m = bonCommandeLignes.reduce((s,l)=>s+(l.qte*l.prixUnitaire),0);
+      if(totalEl) totalEl.textContent = fmt(m) + ' GNF';
+    }
     wrap.querySelectorAll('[data-bon-qte]').forEach(el=>{
       el.addEventListener('input', ()=>{
         bonCommandeLignes[Number(el.dataset.bonQte)].qte = Number(el.value)||0;
-        renderBonCommande();
+        refreshTotal();
       });
     });
     wrap.querySelectorAll('[data-bon-prix]').forEach(el=>{
       el.addEventListener('input', ()=>{
         bonCommandeLignes[Number(el.dataset.bonPrix)].prixUnitaire = Number(el.value)||0;
-        renderBonCommande();
+        refreshTotal();
       });
     });
   }
@@ -4689,7 +4557,6 @@
 
   // ---------- Rendu initial des tableaux ----------
   renderProduits();
-  renderCasiers();
   renderProdGrid();
   renderPanier();
   renderAchats();
