@@ -1933,6 +1933,10 @@ try{
     if(!u.motDePasse) u.motDePasse = data.params.motDePasse || '1234';
   });
   delete data.params.motDePasse;
+  // Migration : identifiant stable par utilisateur (nécessaire à la synchro temps réel)
+  data.params.users.forEach(u=>{
+    if(!u.id) u.id = uid();
+  });
   // Migration : permissions par rôle
   data.params.permissions = data.params.permissions || {};
   data.params.users.forEach(u=>{
@@ -2636,7 +2640,7 @@ try{
   // documents ajoutés dans des sous-collections (jamais réécrits). Chaque appareil écoute
   // ces changements en direct via onSnapshot et met à jour l'affichage automatiquement.
 
-  let rtUnsubProduits = null, rtUnsubMain = null, rtUnsubVentes = null, rtUnsubChambres = null, rtUnsubSejours = null;
+  let rtUnsubProduits = null, rtUnsubMain = null, rtUnsubVentes = null, rtUnsubChambres = null, rtUnsubSejours = null, rtUnsubUsers = null;
   let rtEnabled = false;
   let rtApplyingRemote = false; // évite de re-déclencher une écriture pendant qu'on applique une mise à jour reçue
 
@@ -2669,6 +2673,11 @@ try{
     const docId = currentFbDocId();
     if(!fbSdkReady || !window.__fb || !docId) return null;
     return window.__fb.collection(window.__fb.db, 'motelWifiSauvegardes', docId, 'sejours');
+  }
+  function utilisateursColRef(){
+    const docId = currentFbDocId();
+    if(!fbSdkReady || !window.__fb || !docId) return null;
+    return window.__fb.collection(window.__fb.db, 'motelWifiSauvegardes', docId, 'utilisateurs');
   }
 
   // ----- Écritures atomiques -----
@@ -2751,6 +2760,30 @@ try{
     await window.__fb.setDoc(ref, { supprime: true, qte: 0, pin: currentFbPin() }, { merge: true }).catch(()=>{});
   }
 
+  async function rtSyncUtilisateur(user){
+    // Utilisé à la création/modification d'un utilisateur (nom, rôle, mot de passe)
+    const col = utilisateursColRef();
+    if(!col) return;
+    const ref = window.__fb.doc(col, user.id);
+    await window.__fb.setDoc(ref, { ...user, pin: currentFbPin() }, { merge: true }).catch(()=>{});
+  }
+
+  async function rtSupprimerUtilisateur(id){
+    const col = utilisateursColRef();
+    if(!col) return;
+    const ref = window.__fb.doc(col, id);
+    await window.__fb.setDoc(ref, { supprime: true, pin: currentFbPin() }, { merge: true }).catch(()=>{});
+  }
+
+  async function rtSyncPermissions(permissions){
+    // Les permissions par rôle vivent sur le document principal (petit volume,
+    // pas besoin d'une sous-collection dédiée) et sont donc écoutées via le
+    // même onSnapshot que la caisse (voir startRealtimeSync).
+    const ref = mainDocRef();
+    if(!ref) return;
+    await window.__fb.updateDoc(ref, { permissions, pin: currentFbPin() }).catch(()=>{});
+  }
+
   // ----- Écoute en direct -----
 
   async function startRealtimeSync(){
@@ -2799,6 +2832,14 @@ try{
       }
       if(typeof d.ventesJour === 'number') data.ventesJour = d.ventesJour;
       if(typeof d.ticketsJour === 'number') data.ticketsJour = d.ticketsJour;
+      if(d.permissions){
+        data.params.permissions = d.permissions;
+        if(typeof renderPermissions === 'function') renderPermissions();
+        if(typeof applyPermissionsToNav === 'function' && typeof getSession === 'function'){
+          const session = getSession();
+          if(session) applyPermissionsToNav(session);
+        }
+      }
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
       if(typeof render === 'function') render();
       if(typeof renderCaisseChambres === 'function') renderCaisseChambres();
@@ -2881,6 +2922,37 @@ try{
       if(typeof renderChambreGrid === 'function') renderChambreGrid();
       rtApplyingRemote = false;
     }, ()=>{ /* erreur silencieuse : reste sur les données locales */ });
+
+    // Utilisateurs : ajout/modif/suppression d'un employé depuis n'importe quel
+    // appareil (ex. le PDG ajoute un caissier depuis son téléphone) apparaît en
+    // direct partout, sans écraser le reste des données locales.
+    rtUnsubUsers = window.__fb.onSnapshot(utilisateursColRef(), (snap)=>{
+      rtApplyingRemote = true;
+      snap.docChanges().forEach(change=>{
+        const d = change.doc.data();
+        const idx = data.params.users.findIndex(u=>u.id===change.doc.id);
+        if(change.type === 'removed' || d.supprime){
+          if(idx !== -1) data.params.users.splice(idx,1);
+        } else {
+          const userMaj = { ...d, id: change.doc.id };
+          delete userMaj.pin; delete userMaj.supprime;
+          if(idx !== -1) data.params.users[idx] = userMaj;
+          else data.params.users.push(userMaj);
+        }
+      });
+      if(data.params.users.length === 0){
+        // Garde-fou local : ne jamais se retrouver sans aucun utilisateur affichable
+        data.params.users.push({ id: uid(), nom:'PDG', role:'Président Directeur Général', motDePasse:'1234' });
+      }
+      data.params.users.forEach(u=>{
+        if(!data.params.permissions[u.role]) data.params.permissions[u.role] = ALL_PAGES.slice();
+      });
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+      if(typeof renderUsersParams === 'function') renderUsersParams();
+      if(typeof renderLoginUsers === 'function') renderLoginUsers();
+      if(typeof renderPermissions === 'function') renderPermissions();
+      rtApplyingRemote = false;
+    }, ()=>{ /* erreur silencieuse : reste sur les données locales */ });
   }
 
   function stopRealtimeSync(){
@@ -2889,6 +2961,7 @@ try{
     if(rtUnsubVentes) rtUnsubVentes();
     if(rtUnsubChambres) rtUnsubChambres();
     if(rtUnsubSejours) rtUnsubSejours();
+    if(rtUnsubUsers) rtUnsubUsers();
     if(window.__rtUnsubJournal) window.__rtUnsubJournal();
     rtEnabled = false;
   }
@@ -2939,22 +3012,29 @@ try{
         if(!nom){ alert('Le nom ne peut pas être vide.'); return; }
         if(!motDePasse){ alert('Le mot de passe ne peut pas être vide.'); return; }
         const oldRole = data.params.users[i].role;
-        data.params.users[i] = { nom, role, motDePasse };
+        const id = data.params.users[i].id || uid();
+        data.params.users[i] = { id, nom, role, motDePasse };
         if(!data.params.permissions[role]) data.params.permissions[role] = ALL_PAGES.slice();
         saveData(data);
         renderUsersParams();
         renderLoginUsers();
         renderPermissions();
+        if(rtEnabled){
+          rtSyncUtilisateur(data.params.users[i]);
+          rtSyncPermissions(data.params.permissions);
+        }
       });
     });
   }
   window.__removeUser = function(i){
     if(data.params.users.length <= 1){ alert('Il doit rester au moins un utilisateur.'); return; }
     if(!confirm('Supprimer cet utilisateur ?')) return;
+    const id = data.params.users[i].id;
     data.params.users.splice(i,1);
     saveData(data);
     renderUsersParams();
     renderLoginUsers();
+    if(rtEnabled && id) rtSupprimerUtilisateur(id);
   };
   document.getElementById('btnAddUser').addEventListener('click', ()=>{
     const nom = document.getElementById('inpNewUserNom').value.trim();
@@ -2962,7 +3042,8 @@ try{
     const motDePasse = document.getElementById('inpNewUserPass').value.trim();
     if(!nom){ alert('Merci de saisir un nom.'); return; }
     if(!motDePasse){ alert('Merci de saisir un mot de passe.'); return; }
-    data.params.users.push({ nom, role, motDePasse });
+    const nouvelUtilisateur = { id: uid(), nom, role, motDePasse };
+    data.params.users.push(nouvelUtilisateur);
     if(!data.params.permissions[role]) data.params.permissions[role] = ALL_PAGES.slice();
     saveData(data);
     document.getElementById('inpNewUserNom').value = '';
@@ -2971,6 +3052,10 @@ try{
     renderUsersParams();
     renderLoginUsers();
     renderPermissions();
+    if(rtEnabled){
+      rtSyncUtilisateur(nouvelUtilisateur);
+      rtSyncPermissions(data.params.permissions);
+    }
   });
   renderUsersParams();
   fillFirebaseForm();
@@ -3000,9 +3085,13 @@ try{
           caisse: { especes: data.caisse.especes||0, orangeMoney: data.caisse.orangeMoney||0 },
           ventesJour: data.ventesJour||0,
           ticketsJour: data.ticketsJour||0,
+          permissions: data.params.permissions || {},
           pin,
           updatedAt: new Date().toISOString()
         }, { merge:true });
+      } else if(!mainSnap.data().permissions){
+        // Doc déjà existant (créé avant cette mise à jour) : on complète juste le champ manquant
+        await window.__fb.updateDoc(mainRef, { permissions: data.params.permissions || {}, pin }).catch(()=>{});
       }
       // Initialise la sous-collection produits si elle est vide côté cloud (première synchro)
       const prodColSnap = await window.__fb.getDoc(window.__fb.doc(produitsColRef(), '__marker__')).catch(()=>null);
@@ -3013,6 +3102,15 @@ try{
           window.__fb.setDoc(window.__fb.doc(produitsColRef(), p.id), { ...p, pin }, { merge:true })
         ));
         await window.__fb.setDoc(seedFlagRef, { seededAt: new Date().toISOString(), pin });
+      }
+      // Initialise la sous-collection utilisateurs si elle est vide côté cloud (première synchro)
+      const seedUsersFlagRef = window.__fb.doc(window.__fb.db, 'motelWifiSauvegardes', docId, 'meta', 'seedUsers');
+      const seedUsersSnap = await window.__fb.getDoc(seedUsersFlagRef);
+      if(!seedUsersSnap.exists() && data.params.users.length){
+        await Promise.all(data.params.users.map(u=>
+          window.__fb.setDoc(window.__fb.doc(utilisateursColRef(), u.id), { ...u, pin }, { merge:true })
+        ));
+        await window.__fb.setDoc(seedUsersFlagRef, { seededAt: new Date().toISOString(), pin });
       }
       startRealtimeSync();
     }catch(err){
@@ -3052,6 +3150,7 @@ try{
         if(set.size === 0){ alert("Un rôle doit garder accès à au moins une page."); cb.checked = true; set.add(page); }
         data.params.permissions[role] = [...set];
         saveData(data);
+        if(rtEnabled) rtSyncPermissions(data.params.permissions);
       });
     });
   }
