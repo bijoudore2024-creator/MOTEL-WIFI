@@ -1613,10 +1613,6 @@
             <div style="font-size:11px; color:var(--text-faint); margin-top:6px;">Protège l'accès à cette sauvegarde. Renseigne le même code sur tous les appareils de cet établissement.</div>
           </div>
           <div id="fbSyncStatus" style="font-size:12px; color:var(--text-faint); margin-bottom:14px;">Non connecté.</div>
-          <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="btn outline" id="btnFbSyncNow">☁ Synchroniser maintenant</button>
-            <button class="btn outline" id="btnFbRestore">⬇ Restaurer depuis le cloud</button>
-          </div>
           <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
             <input type="checkbox" id="fbAutoSync" style="width:auto;">
             <label for="fbAutoSync" style="font-size:12px; color:var(--text-faint); margin:0;">Synchronisation automatique après chaque modification</label>
@@ -2548,7 +2544,15 @@ try{
     const ref = await checkPinAndGetRef(db);
     const pin = currentFbPin();
     try{
-      await withRetry(() => window.__fb.setDoc(ref, { payload: JSON.stringify(data), pin, updatedAt: new Date().toISOString() }), {
+      // IMPORTANT : { merge:true } est indispensable ici. Sans lui, ce setDoc
+      // remplacerait TOUT le document — y compris les champs (caisse,
+      // caisseChambres, ventesJour, ticketsJour, permissions) que d'autres
+      // appareils maintiennent en temps réel via des incréments atomiques
+      // (rtCreditCaisse, rtSyncPermissions...). Un merge:true garantit que
+      // cette sauvegarde globale ne touche que "payload"/"pin"/"updatedAt"
+      // et laisse les champs gérés ailleurs intacts, évitant qu'une vente
+      // encaissée sur un appareil ne soit effacée par la sauvegarde d'un autre.
+      await withRetry(() => window.__fb.setDoc(ref, { payload: JSON.stringify(data), pin, updatedAt: new Date().toISOString() }, { merge: true }), {
         timeoutMs: 25000,
         timeoutMsg: 'La synchronisation prend trop de temps — connexion internet instable ou serveur inaccessible.'
       });
@@ -2570,39 +2574,10 @@ try{
     return remote;
   }
 
-  document.getElementById('btnFbSyncNow').addEventListener('click', async ()=>{
-    persistFbSettings();
-    setFbStatus('Synchronisation en cours…');
-    try{
-      await syncToFirebase();
-      setFbStatus('✓ Synchronisé le ' + new Date().toLocaleString('fr-FR'));
-    }catch(err){
-      console.error('[Firebase] btnFbSyncNow:', err);
-      setFbStatus('✗ Échec : ' + (err && err.message ? err.message : 'erreur inconnue'), true);
-    }
-  });
-
-
-  document.getElementById('btnFbRestore').addEventListener('click', async ()=>{
-    persistFbSettings();
-    if(!confirm('Cela va remplacer toutes les données actuelles sur cet appareil par la dernière sauvegarde cloud. Continuer ?')) return;
-    setFbStatus('Restauration en cours…');
-    try{
-      const docId = currentFbDocId(), pin = currentFbPin();
-      const remote = await restoreFromFirebase();
-      data = remote;
-      if(!data.categoriesPerso) data.categoriesPerso = [];
-      if(!data.params.firebase) data.params.firebase = { autoSync: true };
-      data.params.firebase.docId = docId; // conserve l'identifiant utilisé pour cette restauration
-      data.params.firebase.pin = pin;     // conserve le PIN saisi localement
-      localStorage.setItem(STORE_KEY, JSON.stringify(data));
-      setFbStatus('✓ Restauré le ' + new Date().toLocaleString('fr-FR'));
-      alert('Données restaurées. La page va se recharger.');
-      location.reload();
-    }catch(err){
-      setFbStatus('✗ Échec : ' + (err && err.message ? err.message : 'erreur inconnue'), true);
-    }
-  });
+  // Les boutons "Synchroniser maintenant" / "Restaurer depuis le cloud" ont été retirés :
+  // la sauvegarde automatique silencieuse (scheduleAutoSync, plus bas) + la synchro
+  // temps réel (produits, chambres, séjours, utilisateurs, caisse...) couvrent
+  // désormais tous les cas sans action manuelle de l'utilisateur.
 
   let fbSyncPending = false; // vrai si la dernière tentative a échoué et attend une reconnexion
   function scheduleAutoSync(){
