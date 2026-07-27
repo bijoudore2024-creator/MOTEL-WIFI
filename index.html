@@ -357,6 +357,7 @@
     font-family:'JetBrains Mono',monospace; font-weight:700; padding:2px 8px; border-radius:6px;
   }
   .kpi-pct.up{color:var(--green); background:rgba(62,207,142,.12);}
+  .kpi-pct.down{color:var(--red); background:rgba(255,92,92,.12);}
   .kpi-pct.flat{color:var(--text-faint); background:rgba(255,255,255,.04);}
 
   /* ---------- Dashboard second row ---------- */
@@ -664,8 +665,8 @@
             <span>🔍</span><span>Rechercher (produit, client...)</span><span class="kbd">Ctrl + K</span>
           </div>
           <div class="db-header-actions">
-            <div class="icon-btn">🔔<span class="dot" id="notifCount">0</span></div>
-            <div class="icon-btn">📅</div>
+            <div class="icon-btn" id="btnNotif">🔔<span class="dot" id="notifCount">0</span></div>
+            <div class="icon-btn" id="btnCalendrier">📅</div>
             <div class="date-pill" id="dbDate">—</div>
             <div class="user-chip">
               <div class="av">A</div>
@@ -784,7 +785,7 @@
 
           <div class="card">
             <div class="panel-title"><span>ALERTES &amp; RAPPELS</span></div>
-            <div class="alert-item">
+            <div class="alert-item" data-goto="stock">
               <div class="alert-ic red">⚠</div>
               <div class="alert-txt">
                 <div class="t1">Stock faible</div>
@@ -792,7 +793,7 @@
               </div>
               <div class="alert-arrow">›</div>
             </div>
-            <div class="alert-item">
+            <div class="alert-item" data-goto="credits">
               <div class="alert-ic gold">💳</div>
               <div class="alert-txt">
                 <div class="t1">Crédits clients</div>
@@ -800,7 +801,7 @@
               </div>
               <div class="alert-arrow">›</div>
             </div>
-            <div class="alert-item">
+            <div class="alert-item" data-goto="caisse">
               <div class="alert-ic blue" id="alertCaisseIc">💼</div>
               <div class="alert-txt">
                 <div class="t1">Caisse</div>
@@ -1659,12 +1660,12 @@ try{
   } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
 
   const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyCvvIjXsDIMD4Ko3wWL9XzWNtG8tEHjRjc",
-    authDomain: "motel-wifi-dca07.firebaseapp.com",
-    projectId: "motel-wifi-dca07",
-    storageBucket: "motel-wifi-dca07.firebasestorage.app",
-    messagingSenderId: "357021207839",
-    appId: "1:357021207839:web:32d1294ae61e782263b42a"
+    apiKey: "AIzaSyAsF9jBG-IcX3qFOx6Es89x0XnMwIqVJPI",
+    authDomain: "motel-wifi-siguiri.firebaseapp.com",
+    projectId: "motel-wifi-siguiri",
+    storageBucket: "motel-wifi-siguiri.firebasestorage.app",
+    messagingSenderId: "710596630455",
+    appId: "1:710596630455:web:4df9896396453cc4963a32"
   };
 
   const fbApp = initializeApp(FIREBASE_CONFIG);
@@ -1724,6 +1725,29 @@ try{
   }
   renderQuickNav();
 
+  // ---------- Clics sur les alertes du tableau de bord (navigation) ----------
+  document.querySelectorAll('.alert-item[data-goto]').forEach(item=>{
+    item.addEventListener('click', ()=>{
+      const target = document.querySelector('.nav-item[data-page="'+item.dataset.goto+'"]');
+      if(target) target.click();
+    });
+  });
+
+  // ---------- Icônes du header : notifications et calendrier ----------
+  document.getElementById('btnNotif').addEventListener('click', ()=>{
+    const card = document.getElementById('alertStock').closest('.card');
+    if(card){
+      card.scrollIntoView({ behavior:'smooth', block:'center' });
+      card.style.transition = 'box-shadow .3s';
+      card.style.boxShadow = '0 0 0 2px var(--blue)';
+      setTimeout(()=>{ card.style.boxShadow=''; }, 1200);
+    }
+  });
+  document.getElementById('btnCalendrier').addEventListener('click', ()=>{
+    const target = document.querySelector('.nav-item[data-page="rapports"]');
+    if(target) target.click();
+  });
+
   // ---------- Détection écran pliable / double écran (API Window Segments) ----------
   function applyFoldLayout(){
     try{
@@ -1761,6 +1785,9 @@ try{
       if(!d.chambres) d.chambres = [];
       if(!d.sejours) d.sejours = [];
       if(!d.caisseChambres) d.caisseChambres = { especes:0, orangeMoney:0 };
+      if(d.soldeJourDebut === undefined) d.soldeJourDebut = null;
+      if(d.creditsJourDebut === undefined) d.creditsJourDebut = null;
+      if(d.dateSnapshot === undefined) d.dateSnapshot = null;
       if(!d.mouvementsCaisseChambres) d.mouvementsCaisseChambres = [];
       // Migration : donner accès aux nouvelles pages (ex. "chambres") aux rôles qui avaient déjà accès à toutes les pages
       if(d.params && d.params.permissions){
@@ -1792,6 +1819,9 @@ try{
       vouchersVendus: 0,
       depensesJour: 0,
       creditsEnCours: 0,
+      soldeJourDebut: null,
+      creditsJourDebut: null,
+      dateSnapshot: null,
       creditsClients: 0,
       produitsStock: 0,
       casiersOccupes: 0,
@@ -1920,6 +1950,26 @@ try{
   if(data.params.firebase.autoSync === undefined) data.params.firebase.autoSync = true;
 
   let chartVentes, chartCategories, chartRepCA, chartRepCategories;
+  let dashboardPeriodeJours = 7;
+
+  // Construit la série journalière du CA des ventes sur les N derniers jours
+  // à partir de l'historique réel (data.ventesHistorique), plutôt que du
+  // tableau data.ventes7j qui n'était jamais mis à jour.
+  function calculerSerieVentesDashboard(nbJours){
+    const labels = [];
+    const valeurs = [];
+    const today = new Date();
+    for(let i = nbJours-1; i>=0; i--){
+      const d = new Date(today); d.setDate(d.getDate()-i);
+      const dStr = d.toDateString();
+      const total = (data.ventesHistorique||[])
+        .filter(v => new Date(v.date).toDateString() === dStr)
+        .reduce((s,v)=> s + Number(v.total||0), 0);
+      valeurs.push(total);
+      labels.push(d.toLocaleDateString('fr-FR', {day:'2-digit', month:'short'}));
+    }
+    return { labels, valeurs };
+  }
 
   const SEUIL_STOCK_FAIBLE = 5;
 
@@ -1932,6 +1982,15 @@ try{
     data.depenses = data.depenses || [];
     data.achats = data.achats || [];
     const today = new Date().toDateString();
+
+    // Snapshot de début de journée : référence pour les % d'évolution
+    // de la caisse et des crédits (soldes, pas des flux du jour).
+    if(data.dateSnapshot !== today){
+      data.soldeJourDebut = Number(data.caisse.especes||0) + Number(data.caisse.orangeMoney||0);
+      data.creditsJourDebut = Number(data.creditsEnCours||0);
+      data.dateSnapshot = today;
+    }
+
     data.depensesJour = data.depenses
       .filter(d => new Date(d.date).toDateString() === today)
       .reduce((s,d)=>s+Number(d.montant||0),0);
@@ -1941,6 +2000,29 @@ try{
     data.casiersOccupes = data.casiers.filter(c=>c.statut==='occupe').length;
     data.clientsActifs = data.clientsCredits.length;
     data.creditsEnCours = data.clientsCredits.reduce((s,c)=>s+Number(c.montant||0),0);
+  }
+
+  // Calcule et affiche un badge de % d'évolution (↑ vert / ↓ rouge / flat) sur un KPI,
+  // en comparant la valeur actuelle à une valeur de référence (ex. hier, ou début de journée).
+  function setKpiPct(id, valeurActuelle, valeurReference){
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(valeurReference === null || valeurReference === undefined || valeurReference === 0){
+      el.textContent = '0%';
+      el.className = 'kpi-pct flat';
+      return;
+    }
+    const variation = Math.round(((valeurActuelle - valeurReference) / Math.abs(valeurReference)) * 100);
+    if(variation > 0){
+      el.textContent = '↑ +' + variation + '%';
+      el.className = 'kpi-pct up';
+    } else if(variation < 0){
+      el.textContent = '↓ ' + variation + '%';
+      el.className = 'kpi-pct down';
+    } else {
+      el.textContent = '0%';
+      el.className = 'kpi-pct flat';
+    }
   }
 
   function render(){
@@ -1985,6 +2067,25 @@ try{
       document.getElementById('alertCaisse').style.color = '';
     }
     document.getElementById('notifCount').textContent = (data.stockFaible>0?1:0) + (data.creditsEnCours>0?1:0);
+
+    // Badges de variation (%) des 4 cartes KPI
+    const todayStr = new Date().toDateString();
+    const hierDate = new Date(); hierDate.setDate(hierDate.getDate()-1);
+    const hierStr = hierDate.toDateString();
+    const ventesAuj = (data.ventesHistorique||[])
+      .filter(v=> new Date(v.date).toDateString() === todayStr)
+      .reduce((s,v)=> s + Number(v.total||0), 0);
+    const ventesHier = (data.ventesHistorique||[])
+      .filter(v=> new Date(v.date).toDateString() === hierStr)
+      .reduce((s,v)=> s + Number(v.total||0), 0);
+    const depensesHier = (data.depenses||[])
+      .filter(d=> new Date(d.date).toDateString() === hierStr)
+      .reduce((s,d)=> s + Number(d.montant||0), 0);
+
+    setKpiPct('pctVentes', ventesAuj, ventesHier);
+    setKpiPct('pctDepenses', data.depensesJour, depensesHier);
+    setKpiPct('pctCaisse', totalCaisse, data.soldeJourDebut);
+    setKpiPct('pctCredits', data.creditsEnCours, data.creditsJourDebut);
 
     // Aperçu financier
     document.getElementById('finSemaine').innerHTML = fmt(data.caCetteSemaine) + '<span class="stat-unit">GNF</span>';
@@ -2047,19 +2148,14 @@ try{
       return;
     }
     const ctx1 = document.getElementById('chartVentes');
-    const days = [];
-    const today = new Date();
-    for(let i=6;i>=0;i--){
-      const d = new Date(today); d.setDate(d.getDate()-i);
-      days.push(d.toLocaleDateString('fr-FR', {day:'2-digit', month:'short'}));
-    }
+    const { labels: days, valeurs: serieVentes } = calculerSerieVentesDashboard(dashboardPeriodeJours);
     if(chartVentes) chartVentes.destroy();
     chartVentes = new Chart(ctx1, {
       type:'line',
       data:{
         labels: days,
         datasets:[{
-          data: data.ventes7j,
+          data: serieVentes,
           borderColor:'#F5C542',
           backgroundColor:'rgba(201,168,76,.15)',
           fill:true,
@@ -2128,6 +2224,12 @@ try{
   })();
 
   render();
+
+  // ---------- Sélecteur de période du graphique ventes (tableau de bord) ----------
+  document.getElementById('selPeriode').addEventListener('change', function(){
+    dashboardPeriodeJours = this.selectedIndex === 1 ? 30 : 7;
+    renderCharts();
+  });
 
   // ---------- Paramètres ----------
   document.getElementById('btnSaveParams').addEventListener('click', ()=>{
