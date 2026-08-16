@@ -2412,8 +2412,19 @@ try{
 
   function fillFirebaseForm(){
     const cfg = data.params.firebase || {};
+    let changed = false;
     if(!cfg.docId){
       cfg.docId = genIdUnique(data.params.nom);
+      changed = true;
+    }
+    if(!cfg.pin){
+      // PIN auto-généré (6 chiffres) au même titre que le docId, pour que la
+      // synchronisation démarre sans action manuelle. Reste modifiable dans
+      // les paramètres si l'utilisateur veut en choisir un lui-même.
+      cfg.pin = String(Math.floor(100000 + Math.random() * 900000));
+      changed = true;
+    }
+    if(changed){
       data.params.firebase = cfg;
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
     }
