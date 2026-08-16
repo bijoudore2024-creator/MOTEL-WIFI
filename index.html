@@ -1656,12 +1656,12 @@ try{
   } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
 
   const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyAsF9jBG-IcX3qFOx6Es89x0XnMwIqVJPI",
-    authDomain: "motel-wifi-siguiri.firebaseapp.com",
-    projectId: "motel-wifi-siguiri",
-    storageBucket: "motel-wifi-siguiri.firebasestorage.app",
-    messagingSenderId: "710596630455",
-    appId: "1:710596630455:web:4df9896396453cc4963a32"
+    apiKey: "AIzaSyDFxhDtAAkJVtNd0RjqtCHw8PAEKcwMSsw",
+    authDomain: "motel-wifi-533c9.firebaseapp.com",
+    projectId: "motel-wifi-533c9",
+    storageBucket: "motel-wifi-533c9.firebasestorage.app",
+    messagingSenderId: "90299170042",
+    appId: "1:90299170042:web:72a9b4cac3708f40421d43"
   };
 
   const fbApp = initializeApp(FIREBASE_CONFIG);
@@ -3412,19 +3412,58 @@ try{
     }
   }
 
-  function compressImageFile(file, maxSize, quality){
+  // Compresse une image jusqu'à ce que le dataURL final pèse au plus maxBytes (défaut 5 Ko).
+  // Réduit d'abord la qualité JPEG, puis les dimensions si besoin, en plusieurs passes.
+  function compressImageFile(file, maxSize, quality, maxBytes){
+    maxBytes = maxBytes || 5 * 1024; // 5 Ko par défaut
     return new Promise((resolve, reject)=>{
       const reader = new FileReader();
       reader.onload = ()=>{
         const img = new Image();
         img.onload = ()=>{
-          let w = img.width, h = img.height;
-          if(w > h && w > maxSize){ h = Math.round(h*maxSize/w); w = maxSize; }
-          else if(h > maxSize){ w = Math.round(w*maxSize/h); h = maxSize; }
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', quality));
+          function renderAt(size, q){
+            let w = img.width, h = img.height;
+            if(w > h && w > size){ h = Math.round(h*size/w); w = size; }
+            else if(h > size){ w = Math.round(w*size/h); h = size; }
+            else if(w > size){ w = size; }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            return canvas.toDataURL('image/jpeg', q);
+          }
+          function dataUrlBytes(dataUrl){
+            const b64 = dataUrl.split(',')[1] || '';
+            return Math.round(b64.length * 3 / 4);
+          }
+
+          let size = maxSize;
+          let q = quality;
+          let result = renderAt(size, q);
+
+          // Passe 1 : réduire la qualité JPEG
+          let attempts = 0;
+          while(dataUrlBytes(result) > maxBytes && q > 0.1 && attempts < 12){
+            q -= 0.08;
+            result = renderAt(size, q);
+            attempts++;
+          }
+
+          // Passe 2 : si toujours trop lourd, réduire aussi les dimensions
+          attempts = 0;
+          while(dataUrlBytes(result) > maxBytes && size > 40 && attempts < 12){
+            size = Math.round(size * 0.85);
+            q = Math.max(q, 0.5);
+            result = renderAt(size, q);
+            let innerAttempts = 0;
+            while(dataUrlBytes(result) > maxBytes && q > 0.1 && innerAttempts < 8){
+              q -= 0.08;
+              result = renderAt(size, q);
+              innerAttempts++;
+            }
+            attempts++;
+          }
+
+          resolve(result);
         };
         img.onerror = reject;
         img.src = reader.result;
