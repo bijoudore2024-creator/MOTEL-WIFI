@@ -2312,60 +2312,22 @@ try{
       document.head.appendChild(link);
 
       if('serviceWorker' in navigator){
-        // Service worker offline réel : met en cache le document (app shell) et toute
-        // ressource récupérée (Chart.js, Firebase SDK, icônes...), et sert depuis le
-        // cache dès que le réseau est indisponible. Stratégie "network-first" :
-        // toujours essayer le réseau en premier (pour avoir la version à jour),
-        // et retomber sur le cache local en cas d'échec (mode hors-ligne).
-        const CACHE_VERSION = 'motel-wifi-siguiri-v1';
-        const swCode = [
-          "const CACHE_NAME = '" + CACHE_VERSION + "';",
-          "self.addEventListener('install', (e) => {",
-          "  self.skipWaiting();",
-          "  e.waitUntil(",
-          "    caches.open(CACHE_NAME).then((cache) => cache.add(self.registration.scope).catch(() => {}))",
-          "  );",
-          "});",
-          "self.addEventListener('activate', (e) => {",
-          "  e.waitUntil(",
-          "    caches.keys().then((keys) => Promise.all(",
-          "      keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))",
-          "    )).then(() => self.clients.claim())",
-          "  );",
-          "});",
-          "self.addEventListener('fetch', (e) => {",
-          "  if (e.request.method !== 'GET') return;",
-          "  e.respondWith(",
-          "    fetch(e.request).then((networkResponse) => {",
-          "      const responseClone = networkResponse.clone();",
-          "      caches.open(CACHE_NAME).then((cache) => {",
-          "        cache.put(e.request, responseClone).catch(() => {});",
-          "      });",
-          "      return networkResponse;",
-          "    }).catch(() => {",
-          "      return caches.match(e.request).then((cached) => {",
-          "        if (cached) return cached;",
-          "        if (e.request.mode === 'navigate') {",
-          "          return caches.match(self.registration.scope);",
-          "        }",
-          "        return new Response('', { status: 504, statusText: 'Hors ligne' });",
-          "      });",
-          "    })",
-          "  );",
-          "});"
-        ].join('\n');
-        const swBlob = new Blob([swCode], {type:'application/javascript'});
-        const swUrl = URL.createObjectURL(swBlob);
-        navigator.serviceWorker.register(swUrl).then((reg)=>{
+        // Service worker offline réel, servi comme fichier statique séparé (sw.js) —
+        // un blob URL n'est pas retrouvable par le navigateur d'un lancement à l'autre,
+        // ce qui empêchait le mode hors-ligne de fonctionner une fois l'app fermée puis
+        // rouverte sans réseau. sw.js doit être placé dans le même dossier que ce fichier.
+        navigator.serviceWorker.register('./sw.js').then((reg)=>{
           // Précharge dans le cache les ressources externes déjà utilisées par l'app
           // (Chart.js, Firebase) pour qu'elles soient dispo hors-ligne dès le 1er lancement.
           if(reg.active){
-            caches.open(CACHE_VERSION).then((cache)=>{
+            caches.open('motel-wifi-siguiri-v2').then((cache)=>{
               const assets = Array.from(document.scripts).map(s=>s.src).filter(Boolean);
               cache.addAll(assets).catch(()=>{});
             });
           }
-        }).catch(()=>{});
+        }).catch((err)=>{
+          console.warn('Enregistrement du service worker impossible :', err);
+        });
       }
 
       const btnInstall = document.getElementById('btnInstallApp');
