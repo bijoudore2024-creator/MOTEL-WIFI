@@ -2403,25 +2403,27 @@ try{
       .replace(/^-+|-+$/g,'') || 'motel';
   }
 
-  function genIdUnique(str){
-    // Identifiant non-devinable : slug lisible + suffixe aléatoire.
-    // Empêche deux motels différents de tomber sur le même docId Firestore.
-    const rnd = Math.random().toString(36).slice(2, 8);
-    return slugify(str) + '-' + rnd;
-  }
+  // Identifiant + PIN fixes, partagés par tous les appareils qui ouvrent ce fichier :
+  // c'est ce qui leur permet de converger vers le même document Firestore et donc
+  // de se synchroniser entre eux, sans qu'il faille recopier de code à la main.
+  // (Avant : chacun générait son propre docId/PIN aléatoire au 1er lancement, donc
+  // deux téléphones ne pointaient jamais vers les mêmes données.)
+  const DEFAULT_FB_DOC_ID = 'motel-wifi-siguiri-principal';
+  const DEFAULT_FB_PIN = '260826';
 
   function fillFirebaseForm(){
     const cfg = data.params.firebase || {};
     let changed = false;
-    if(!cfg.docId){
-      cfg.docId = genIdUnique(data.params.nom);
+    // Migration automatique : si un ancien docId/PIN aléatoire (généré avant ce
+    // correctif) est présent sur cet appareil, on le remplace par le fixe partagé
+    // — aucune action de l'utilisateur nécessaire, ça se corrige tout seul au
+    // prochain chargement de la page.
+    if(cfg.docId !== DEFAULT_FB_DOC_ID){
+      cfg.docId = DEFAULT_FB_DOC_ID;
       changed = true;
     }
-    if(!cfg.pin){
-      // PIN auto-généré (6 chiffres) au même titre que le docId, pour que la
-      // synchronisation démarre sans action manuelle. Reste modifiable dans
-      // les paramètres si l'utilisateur veut en choisir un lui-même.
-      cfg.pin = String(Math.floor(100000 + Math.random() * 900000));
+    if(cfg.pin !== DEFAULT_FB_PIN){
+      cfg.pin = DEFAULT_FB_PIN;
       changed = true;
     }
     if(changed){
@@ -2433,6 +2435,7 @@ try{
     document.getElementById('fbAutoSync').checked = cfg.autoSync !== false; // activé par défaut
     setFbStatus('Prêt. Sauvegarde automatique activée.');
   }
+
 
   function setFbStatus(msg, isError){
     const el = document.getElementById('fbSyncStatus');
