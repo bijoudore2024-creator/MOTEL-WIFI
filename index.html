@@ -3302,7 +3302,7 @@ try{
         </td>
       </tr>`;
     }).join('');
-    wrap.innerHTML = `<div class="data-card"><table>
+    wrap.innerHTML = `<div class="data-card" style="overflow-x:auto;"><table>
       <thead><tr><th>PRODUIT</th><th>CATÉGORIE</th><th>PRIX</th><th>STOCK</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -3888,7 +3888,7 @@ try{
         <td><button class="btn outline" style="padding:6px 12px; font-size:12px;" data-checkout="${s.id}">Check-out</button></td>
       </tr>`;
     }).join('');
-    wrap.innerHTML = `<div class="data-card"><table>
+    wrap.innerHTML = `<div class="data-card" style="overflow-x:auto;"><table>
       <thead><tr><th>CHAMBRE</th><th>CLIENT</th><th>DURÉE</th><th>TOTAL</th><th>ARRIVÉE</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -4250,7 +4250,7 @@ try{
         </td>
       </tr>`;
     }).join('');
-    wrap.innerHTML = `<div class="data-card"><table>
+    wrap.innerHTML = `<div class="data-card" style="overflow-x:auto;"><table>
       <thead><tr><th>LIBELLÉ</th><th>MONTANT</th><th>SOURCE</th><th>DATE</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -4424,7 +4424,7 @@ try{
         </td>
       </tr>`;
     }).join('');
-    wrap.innerHTML = `<div class="data-card"><table>
+    wrap.innerHTML = `<div class="data-card" style="overflow-x:auto;"><table>
       <thead><tr><th>FOURNISSEUR</th><th>PRODUITS</th><th>ARTICLES</th><th>TOTAL</th><th>SOURCE</th><th>DATE</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -4516,7 +4516,7 @@ try{
         <td class="mono">${fmt(l.montant)} GNF</td>
         <td><div class="row-actions"><div class="icon-action danger" data-del-ligne="${i}" title="Retirer">✕</div></div></td>
       </tr>`).join('');
-    wrap.innerHTML = `<div class="data-card"><table>
+    wrap.innerHTML = `<div class="data-card" style="overflow-x:auto;"><table>
       <thead><tr><th>PRODUIT</th><th>QTÉ</th><th>PRIX UNIT.</th><th>TOTAL</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -4940,7 +4940,7 @@ try{
         </td>
       </tr>`;
     }).join('');
-    wrap.innerHTML = `<div class="data-card"><table>
+    wrap.innerHTML = `<div class="data-card" style="overflow-x:auto;"><table>
       <thead><tr><th>CLIENT</th><th>SOLDE DÛ</th><th>TÉLÉPHONE</th><th>NOTE</th><th>DATE</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
