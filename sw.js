@@ -3,13 +3,31 @@
 // un blob URL n'est pas retrouvable par le navigateur d'un lancement à l'autre,
 // ce qui empêchait le mode hors-ligne de fonctionner après fermeture de l'app.
 
-const CACHE_NAME = 'motel-wifi-siguiri-v2';
+const CACHE_NAME = 'motel-wifi-siguiri-v5';
 // Liste des ressources connues à mettre en cache dès l'installation, en plus
 // de la page elle-même. Complétée dynamiquement à l'exécution (fetch en cache-first
 // pour tout ce qui est déjà passé par le réseau une fois).
 const APP_SHELL = [
   './',
-  './index.html'
+  './index.html',
+  './assets/hero-motel.svg',
+  './assets/modern-room.svg',
+  './assets/modern-wifi.svg',
+  './assets/boissons-modern.png',
+  './assets/boisson-01.png',
+  './assets/boisson-02.png',
+  './assets/boisson-03.png',
+  './assets/boisson-04.png',
+  './assets/boisson-05.png',
+  './assets/beer-modern-01.png',
+  './assets/beer-modern-02.png',
+  './assets/beer-modern-03.png',
+  './assets/beer-modern-04.png',
+  './assets/beer-modern-05.png',
+  './assets/beer-modern-06.png',
+  './assets/beer-modern-07.png',
+  './assets/beer-modern-08.png',
+  './assets/beer-modern-09.png'
 ];
 
 self.addEventListener('install', (event) => {
