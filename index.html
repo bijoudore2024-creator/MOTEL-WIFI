@@ -713,6 +713,7 @@
       <div class="nav-item active" data-page="dashboard"><span class="ic">●</span>Tableau de bord</div>
       <div class="nav-item" data-page="vendre"><span class="ic">○</span>Vente</div>
       <div class="nav-item" data-page="stock"><span class="ic">☰</span>Stock</div>
+      <div class="nav-item" data-page="depot"><span class="ic">📦</span>Dépôt & caisse</div>
       <div class="nav-item" data-page="achats"><span class="ic">🛒</span>Achats fournisseurs</div>
       <div class="nav-item" data-page="depenses"><span class="ic">−</span>Dépenses</div>
       <div class="nav-item" data-page="credits"><span class="ic">✉</span>Crédits clients</div>
@@ -1213,6 +1214,73 @@
         </div>
       </section>
 
+
+      <!-- MODULE DEPOT BOISSONS / CAISSE GROS -->
+      <section class="page" id="page-depot">
+        <div class="quick-nav"></div>
+        <div class="page-title">Dépôt boissons & caisse</div>
+        <div class="page-sub">Gestion des conditionnements paramétrables, ventes en gros et mouvements de caisse.</div>
+        <div class="grid-3" style="margin:16px 0;">
+          <div class="stat-card"><div class="stat-label">Ventes du jour</div><div class="stat-value" id="depotKpiVentes">0 GNF</div></div>
+          <div class="stat-card"><div class="stat-label">Encaissements du jour</div><div class="stat-value" id="depotKpiEncaisse">0 GNF</div></div>
+          <div class="stat-card"><div class="stat-label">Articles au dépôt</div><div class="stat-value" id="depotKpiStock">0</div></div>
+        </div>
+        <div class="card" style="padding:18px;margin-bottom:16px;">
+          <h3 style="margin-top:0;">Paramétrer les conditionnements</h3>
+          <p class="page-sub">Exemple : 1 casier = 24 bouteilles, 1 carton = 12 unités. Tu peux créer tes propres unités.</p>
+          <div class="form-row">
+            <div class="form-group"><label>Nom du conditionnement</label><input id="depUnitNom" placeholder="Ex. casier, carton, douzaine"></div>
+            <div class="form-group"><label>Nombre d'unités de base</label><input id="depUnitNb" type="number" min="1" value="24"></div>
+          </div>
+          <button class="btn" id="depUnitAdd">Ajouter le conditionnement</button>
+          <div id="depUnitsList" style="margin-top:12px;"></div>
+        </div>
+        <div class="card" style="padding:18px;margin-bottom:16px;">
+          <h3 style="margin-top:0;">Produits du dépôt</h3>
+          <div class="form-row">
+            <div class="form-group"><label>Produit</label><input id="depProdNom" placeholder="Ex. Skol 33 cl"></div>
+            <div class="form-group"><label>Stock (unités de base)</label><input id="depProdStock" type="number" min="0" value="0"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Conditionnement principal</label><select id="depProdUnit"></select></div>
+            <div class="form-group"><label>Prix d'achat par conditionnement (GNF)</label><input id="depProdAchat" type="number" min="0" value="0"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Prix de vente en gros par conditionnement (GNF)</label><input id="depProdVente" type="number" min="0" value="0"></div>
+            <div class="form-group"><label>Unité de base</label><input id="depProdBase" placeholder="Ex. bouteille" value="bouteille"></div>
+          </div>
+          <button class="btn" id="depProdAdd">Enregistrer le produit</button>
+          <div id="depProductsList" style="margin-top:14px;overflow-x:auto;"></div>
+        </div>
+        <div class="card" style="padding:18px;margin-bottom:16px;">
+          <h3 style="margin-top:0;">Vente en gros</h3>
+          <div class="form-row">
+            <div class="form-group"><label>Produit</label><select id="depSaleProd"></select></div>
+            <div class="form-group"><label>Conditionnement vendu</label><select id="depSaleUnit"></select></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Quantité de conditionnements</label><input id="depSaleQty" type="number" min="1" value="1"></div>
+            <div class="form-group"><label>Prix unitaire de gros (GNF)</label><input id="depSalePrice" type="number" min="0" value="0"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Mode de paiement</label><select id="depSalePay"><option value="Espèces">Espèces</option><option value="Orange Money">Orange Money</option><option value="Crédit">Crédit client</option></select></div>
+            <div class="form-group"><label>Client (facultatif)</label><input id="depSaleClient" placeholder="Nom du client"></div>
+          </div>
+          <div id="depSaleInfo" class="page-sub">Sélectionne un produit pour voir le total et le stock disponible.</div>
+          <button class="btn" id="depSaleSave">Enregistrer la vente</button>
+        </div>
+        <div class="card" style="padding:18px;margin-bottom:16px;">
+          <h3 style="margin-top:0;">Mouvements de caisse du dépôt</h3>
+          <div class="form-row">
+            <div class="form-group"><label>Type</label><select id="depCashType"><option value="entree">Entrée de caisse</option><option value="sortie">Sortie de caisse</option></select></div>
+            <div class="form-group"><label>Montant (GNF)</label><input id="depCashAmount" type="number" min="1" placeholder="Montant"></div>
+          </div>
+          <div class="form-group"><label>Motif</label><input id="depCashMotif" placeholder="Ex. achat, transport, correction"></div>
+          <button class="btn outline" id="depCashSave">Enregistrer le mouvement</button>
+          <div id="depCashBalance" style="font-weight:700;margin:12px 0;"></div>
+          <div id="depHistory" style="overflow-x:auto;"></div>
+        </div>
+      </section>
       <!-- STOCK -->
       <section class="page" id="page-stock">
         <div class="quick-nav"></div>
@@ -1909,7 +1977,7 @@ try{
   overlay.addEventListener('click', closeSidebar);
 
   // ---------- Data layer (localStorage for now, Firebase plus tard) ----------
-  const ALL_PAGES = ['dashboard','vendre','stock','achats','depenses','credits','caisse','chambres','caisse-chambres','rapports','journal','parametres'];
+  const ALL_PAGES = ['dashboard','vendre','stock','depot','achats','depenses','credits','caisse','chambres','caisse-chambres','rapports','journal','parametres'];
   const PAGE_LABELS = {
     dashboard:'Tableau de bord', vendre:'Vente', stock:'Stock',
     achats:'Achats fournisseurs', depenses:'Dépenses', credits:'Crédits clients', caisse:'Caisse', chambres:'Chambres', 'caisse-chambres':'Caisse chambres',
@@ -1934,6 +2002,7 @@ try{
       if(d.params && d.params.permissions){
         Object.keys(d.params.permissions).forEach(role=>{
           const allowed = d.params.permissions[role];
+          if(Array.isArray(allowed) && allowed.includes('stock') && !allowed.includes('depot')) allowed.push('depot');
           if(Array.isArray(allowed) && allowed.includes('caisse') && allowed.includes('vendre')){
             if(!allowed.includes('chambres')) allowed.push('chambres');
             if(!allowed.includes('caisse-chambres')) allowed.push('caisse-chambres');
@@ -4003,7 +4072,59 @@ try{
       <style>
         body{font-family:'Courier New',monospace; padding:16px; color:#111; max-width:320px; margin:0 auto;}
         table{width:100%;}
-      </style></head><body>${dernierRecuHTML}</body></html>`);
+      </style></head><body>${dernierRecuHTML}
+<script>
+(function(){
+ const KEY='motelWifiSiguiri_depot_v1';
+ const $=id=>document.getElementById(id);
+ const money=n=>Math.round(Number(n)||0).toLocaleString('fr-FR')+' GNF';
+ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ let d;
+ try{d=JSON.parse(localStorage.getItem(KEY))||{};}catch(e){d={};}
+ d.units=Array.isArray(d.units)&&d.units.length?d.units:[{id:'casier',nom:'Casier',nb:24},{id:'carton',nom:'Carton',nb:12},{id:'douzaine',nom:'Douzaine',nb:12},{id:'unite',nom:'Unité',nb:1}];
+ d.products=Array.isArray(d.products)?d.products:[];
+ d.sales=Array.isArray(d.sales)?d.sales:[];
+ d.cash=Array.isArray(d.cash)?d.cash:[];
+ function save(){localStorage.setItem(KEY,JSON.stringify(d));render();}
+ function unit(id){return d.units.find(x=>x.id===id)||d.units[0];}
+ function render(){
+  $('depUnitsList').innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap">'+d.units.map(u=>`<span class="badge">${esc(u.nom)} = ${u.nb} unité(s) <button data-delunit="${u.id}" title="Supprimer">×</button></span>`).join('')+'</div>';
+  $('depProdUnit').innerHTML=d.units.map(u=>`<option value="${u.id}">${esc(u.nom)} (${u.nb} ${esc(u.nb===1?'unité':'unités')})</option>`).join('');
+  $('depSaleUnit').innerHTML=d.units.map(u=>`<option value="${u.id}">${esc(u.nom)} (${u.nb} unités)</option>`).join('');
+  $('depSaleProd').innerHTML=d.products.map(p=>`<option value="${p.id}">${esc(p.nom)}</option>`).join('');
+  $('depProductsList').innerHTML=d.products.length?`<table class="data-table"><thead><tr><th>Produit</th><th>Stock</th><th>Prix achat / conditionnement</th><th>Prix gros / conditionnement</th></tr></thead><tbody>${d.products.map(p=>`<tr><td>${esc(p.nom)}</td><td>${p.stock} ${esc(p.base)}</td><td>${money(p.achat)}</td><td>${money(p.vente)}</td></tr>`).join('')}</tbody></table>`:'<p class="page-sub">Aucun produit enregistré.</p>';
+  const today=new Date().toLocaleDateString('en-CA');
+  const ventes=d.sales.filter(s=>s.date.slice(0,10)===today);
+  $('depotKpiVentes').textContent=money(ventes.reduce((a,s)=>a+s.total,0));
+  $('depotKpiEncaisse').textContent=money(ventes.filter(s=>s.paiement!=='Crédit').reduce((a,s)=>a+s.total,0));
+  $('depotKpiStock').textContent=d.products.length;
+  const cashBalance=d.cash.reduce((a,m)=>a+(m.type==='entree'?m.montant:-m.montant),0)+d.sales.filter(s=>s.paiement!=='Crédit').reduce((a,s)=>a+s.total,0);
+  $('depCashBalance').textContent='Solde théorique de la caisse dépôt : '+money(cashBalance);
+  $('depHistory').innerHTML='<table class="data-table"><thead><tr><th>Date</th><th>Opération</th><th>Détail</th><th>Montant</th></tr></thead><tbody>'+[
+   ...d.sales.map(s=>({date:s.date,type:'Vente gros',detail:`${s.produit} — ${s.qte} ${s.unite} — ${s.paiement}`,montant:s.total,sort:s.date})),
+   ...d.cash.map(m=>({date:m.date,type:m.type==='entree'?'Entrée caisse':'Sortie caisse',detail:m.motif,montant:(m.type==='entree'?1:-1)*m.montant,sort:m.date}))
+  ].sort((a,b)=>b.sort.localeCompare(a.sort)).slice(0,100).map(m=>`<tr><td>${new Date(m.date).toLocaleString('fr-FR')}</td><td>${esc(m.type)}</td><td>${esc(m.detail)}</td><td>${money(m.montant)}</td></tr>`).join('')+'</tbody></table>';
+  updateSaleInfo();
+ }
+ function updateSaleInfo(){
+  const p=d.products.find(x=>x.id===$('depSaleProd').value),u=unit($('depSaleUnit').value),q=Math.max(1,Number($('depSaleQty').value)||1);
+  if(p){$('depSalePrice').value=$('depSalePrice').dataset.manual==='1' ? $('depSalePrice').value : Math.round(p.vente*u.nb/unit(p.unitId).nb);$('depSaleInfo').textContent=`Stock disponible : ${p.stock} ${p.base}. Cette vente consommera ${q*u.nb} ${p.base}(s), total ${money(q*(Number($('depSalePrice').value)||0))}.`;}
+  else $('depSaleInfo').textContent='Ajoute un produit avant d’enregistrer une vente.';
+ }
+ $('depUnitAdd').addEventListener('click',()=>{const nom=$('depUnitNom').value.trim(),nb=Math.floor(Number($('depUnitNb').value));if(!nom||!Number.isFinite(nb)||nb<1){alert('Saisis un nom et un nombre d’unités supérieur à zéro.');return;}if(d.units.some(u=>u.nom.toLowerCase()===nom.toLowerCase())){alert('Ce conditionnement existe déjà.');return;}d.units.push({id:'u'+Date.now(),nom,nb});$('depUnitNom').value='';save();});
+ $('depUnitsList').addEventListener('click',e=>{const b=e.target.closest('[data-delunit]');if(!b)return;const id=b.dataset.delunit;if(d.products.some(p=>p.unitId===id)){alert('Ce conditionnement est utilisé par un produit.');return;}if(d.units.length<=1){alert('Garde au moins un conditionnement.');return;}d.units=d.units.filter(u=>u.id!==id);save();});
+ $('depProdAdd').addEventListener('click',()=>{const nom=$('depProdNom').value.trim(),stock=Number($('depProdStock').value),achat=Number($('depProdAchat').value),vente=Number($('depProdVente').value),unitId=$('depProdUnit').value,base=$('depProdBase').value.trim()||'unité';if(!nom||![stock,achat,vente].every(Number.isFinite)||stock<0||achat<0||vente<0){alert('Vérifie le nom, le stock et les prix.');return;}d.products.push({id:'p'+Date.now(),nom,stock,achat,vente,unitId,base});$('depProdNom').value='';save();});
+ $('depSaleProd').addEventListener('change',()=>{$('depSalePrice').dataset.manual='';updateSaleInfo();});
+ $('depSaleUnit').addEventListener('change',()=>{$('depSalePrice').dataset.manual='';updateSaleInfo();});
+ $('depSalePrice').addEventListener('input',()=>{$('depSalePrice').dataset.manual='1';updateSaleInfo();});
+ ['depSaleQty'].forEach(id=>$(id).addEventListener('input',updateSaleInfo));
+ $('depSaleSave').addEventListener('click',()=>{const p=d.products.find(x=>x.id===$('depSaleProd').value),u=unit($('depSaleUnit').value),q=Math.floor(Number($('depSaleQty').value)),price=Number($('depSalePrice').value),need=q*u.nb;if(!p){alert('Sélectionne un produit.');return;}if(!Number.isInteger(q)||q<1||!Number.isFinite(price)||price<0){alert('Vérifie la quantité et le prix.');return;}if(p.stock<need){alert(`Stock insuffisant : ${p.stock} ${p.base} disponible(s), ${need} requis.`);return;}if(!confirm(`Confirmer ${q} ${u.nom}(s) de ${p.nom} pour ${money(q*price)} ?`))return;p.stock-=need;d.sales.push({id:'s'+Date.now(),date:new Date().toISOString(),produit:p.nom,produitId:p.id,qte:q,unite:u.nom,baseQty:need,total:q*price,paiement:$('depSalePay').value,client:$('depSaleClient').value.trim()});$('depSaleClient').value='';$('depSaleQty').value='1';$('depSalePrice').dataset.manual='';save();});
+ $('depCashSave').addEventListener('click',()=>{const montant=Number($('depCashAmount').value),motif=$('depCashMotif').value.trim();if(!Number.isFinite(montant)||montant<=0||!motif){alert('Saisis un montant positif et un motif.');return;}d.cash.push({id:'c'+Date.now(),date:new Date().toISOString(),type:$('depCashType').value,montant,motif});$('depCashAmount').value='';$('depCashMotif').value='';save();});
+ render();
+})();
+</script>
+
+</body></html>`);
     win.document.close();
     win.focus();
     win.print();
